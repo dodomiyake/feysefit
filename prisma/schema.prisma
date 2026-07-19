@@ -1,0 +1,180 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Designer {
+  id              String          @id
+  businessName    String
+  designerName    String
+  location        String
+  specialty       String
+  bio             String
+  rating          Float
+  reviewCount     Int
+  portfolioImages String
+  coverImage      String
+  profileImage    String
+  marketplaceLive Boolean         @default(false)
+  projects        Project[]
+  invites         PendingInvite[]
+  customers       Customer[]      @relation("LinkedDesigner")
+  user            User?
+}
+
+model Customer {
+  id                    String    @id
+  name                  String
+  location              String
+  email                 String    @unique
+  projectCount          Int       @default(0)
+  linkedDesignerId      String?
+  linkedDesigner        Designer? @relation("LinkedDesigner", fields: [linkedDesignerId], references: [id])
+  registrationType      String?
+  hasConcludedProject   Boolean   @default(false)
+  unlinkStatus          String    @default("none")
+  unlinkReason          String?
+  unlinkSubmittedAt     String?
+  activeUnlinkRequestId String?
+  projects              Project[]
+  user                  User?
+  measurementProfile    CustomerMeasurementProfile?
+}
+
+model CustomerMeasurementProfile {
+  customerId   String   @id
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  unit         String   @default("inches")
+  preferredFit String   @default("regular")
+  status       String   @default("draft")
+  values       String   @default("{}")
+  updatedAt    String?
+}
+
+model Conversation {
+  id            String    @id
+  title         String
+  preview       String
+  timestamp     String
+  avatar        String?
+  isGroup       Boolean   @default(false)
+  tag           String?
+  online        Boolean   @default(false)
+  dimmed        Boolean   @default(false)
+  contactName   String
+  contactRole   String
+  contactAvatar String
+  dateLabel     String?
+  designerId    String?
+  customerId    String?
+  projectId     String?
+  messages      Message[]
+}
+
+model Message {
+  id             String       @id
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         String
+  senderName     String
+  text           String
+  timestamp      String
+  attachments    String?
+}
+
+model Project {
+  id                  String              @id
+  projectCode         String
+  paletteId           String
+  title               String
+  customerName        String
+  customerId          String?
+  customer            Customer?           @relation(fields: [customerId], references: [id])
+  designerId          String              @default("1")
+  designer            Designer            @relation(fields: [designerId], references: [id])
+  outfitType          String
+  deadline            String
+  budget              String
+  status              String
+  referenceImages     String
+  customerUpdate      String
+  designerUpdate      String              @default("")
+  internalNotes       String              @default("")
+  measurements        String?
+  galleryImages       String?
+  primaryFabric       String?
+  secondaryMaterial   String?
+  lining              String?
+  startedDate         String?
+  estimatedDelivery   String?
+  measurementFitNote  String?
+  teamMembers         String?
+  lastUpdated         String?
+  customerReferences  CustomerReference[]
+}
+
+model CustomerReference {
+  id         String  @id
+  projectId  String
+  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  url        String
+  category   String
+  caption    String?
+  uploadedAt String
+}
+
+model PendingInvite {
+  id          String   @id
+  designerId  String   @default("1")
+  designer    Designer @relation(fields: [designerId], references: [id])
+  name        String
+  email       String
+  projectType String
+  sentAt      String
+  sentAgo     String
+  status      String   @default("pending")
+}
+
+model UnlinkRequest {
+  id                   String  @id
+  customerId           String
+  customerName         String
+  designerId           String
+  designerName         String
+  reason               String
+  submittedAt          String
+  status               String
+  adminNotes           String?
+  adminContactedAt     String?
+  designerConfirmation String?
+  designerResponse     String?
+  designerRespondedAt  String?
+}
+
+model MarketplaceApproval {
+  id            String  @id
+  designerId    String
+  designerName  String
+  businessName  String
+  specialty     String
+  submittedAt   String
+  status        String  @default("pending")
+  adminNotes    String?
+  declineReason String?
+}
+
+model User {
+  id           String    @id
+  email        String    @unique
+  passwordHash String
+  role         String
+  name         String
+  customerId   String?   @unique
+  customer     Customer? @relation(fields: [customerId], references: [id])
+  designerId   String?   @unique
+  designer     Designer? @relation(fields: [designerId], references: [id])
+}

@@ -1,0 +1,281 @@
+import { createClient } from "@/lib/supabase/client";
+import { assertMessageAttachmentFile } from "@/lib/messages/attachment-utils";
+import { legacyOrIdFilter, isUuid } from "@/lib/legacy-id-lookup";
+import {
+  MAX_STORAGE_IMAGE_BYTES,
+  STORAGE_BUCKETS,
+  STORAGE_DOCUMENT_TYPES,
+  STORAGE_IMAGE_TYPES,
+  type StorageBucket,
+} from "@/lib/storage/buckets";
+import {
+  buildOwnedObjectPath,
+  isPrivateStorageBucket,
+  parseStorageObjectUrl,
+} from "@/lib/storage/storage-url";
+
+/** Short-lived display URLs only — never persist these. */
+const SIGNED_URL_TTL_SECONDS = 5 * 60;
+
+const BLOCKED_EXTENSIONS = new Set([
+  "exe",
+  "bat",
+  "cmd",
+  "com",
+  "msi",
+  "scr",
+  "js",
+  "mjs",
+  "cjs",
+  "vbs",
+  "ps1",
+  "sh",
+  "bash",
+  "dll",
+  "so",
+  "dylib",
+  "apk",
+  "jar",
+  "html",
+  "htm",
+  "svg",
+  "xhtml",
+  "php",
+  "asp",
+  "aspx",
+  "jsp",
+  "cgi",
+  "py",
+  "rb",
+  "pl",
+]);
+
+const IMAGE_MIME = new Set<string>(STORAGE_IMAGE_TYPES);
+const DOCUMENT_MIME = new Set<string>(STORAGE_DOCUMENT_TYPES);
+
+function sanitizeFileName(name: string) {
+  return name.replace(/[^a-zA-Z0-9._-]/g, "-").toLowerCase();
+}
+
+function getFileExtension(file: File) {
+  const fromName = file.name.includes(".") ? file.name.split(".").pop() : null;
+  if (fromName && /^[a-z0-9]+$/i.test(fromName)) return fromName.toLowerCase();
+
+  const mimeMap: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "application/pdf": "pdf",
+    "application/msword": "doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+    "application/vnd.ms-excel": "xls",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+    "text/plain": "txt",
+  };
+  return mimeMap[file.type] || "";
+}
+
+function getBaseFileName(name: string) {
+  const sanitized = sanitizeFileName(name);
+  const lastDot = sanitized.lastIndexOf(".");
+  if (lastDot <= 0) return sanitized || "file";
+  return sanitized.slice(0, lastDot) || "file";
+}
+
+function assertNotExecutable(file: File) {
+  const extension = file.name.includes(".")
+    ? file.name.split(".").pop()?.toLowerCase()
+    : undefined;
+  if (extension && BLOCKED_EXTENSIONS.has(extension)) {
+    throw new Error("This file type is not allowed.");
+  }
+  if (!file.type || file.type === "application/octet-stream" || file.type === "application/x-msdownload") {
+    if (extension && BLOCKED_EXTENSIONS.has(extension)) {
+      throw new Error("This file type is not allowed.");
+    }
+  }
+}
+
+function assertImageFile(file: File) {
+  assertNotExecutable(file);
+  if (!IMAGE_MIME.has(file.type)) {
+    throw new Error("Please upload a JPG, PNG, WebP, or GIF image.");
+  }
+  if (file.size > MAX_STORAGE_IMAGE_BYTES) {
+    throw new Error("Image must be 5MB or smaller.");
+  }
+  const extension = getFileExtension(file);
+  if (!extension || BLOCKED_EXTENSIONS.has(extension)) {
+    throw new Error("Please upload a JPG, PNG, WebP, or GIF image.");
+  }
+}
+
+/** Durable public-shaped URL for DB persistence (not readable if the bucket is private). */
+function durableObjectUrl(bucket: StorageBucket, path: string): string {
+  const supabase = createClient();
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  return data.publicUrl;
+}
+
+/** Resolve app project id / legacy id to the Postgres UUID used in storage paths. */
+async function resolveProjectUuidForStorage(
+  projectId?: string | null
+): Promise<string | null> {
+  const trimmed = projectId?.trim();
+  if (!trimmed) return null;
+  if (isUuid(trimmed)) return trimmed;
+
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("projects")
+    .select("id")
+    .or(legacyOrIdFilter(trimmed))
+    .maybeSingle();
+  if (error || !data?.id) return null;
+  return data.id;
+}
+
+async function uploadOwnedObject(
+  bucket: StorageBucket,
+  ownerId: string,
+  file: File,
+  prefix: string,
+  projectId?: string | null,
+  contentType?: string
+): Promise<string> {
+  assertNotExecutable(file);
+  const supabase = createClient();
+  const extension = getFileExtension(file);
+  if (!extension) {
+    throw new Error("Unsupported or missing file extension.");
+  }
+  const baseName = getBaseFileName(file.name);
+  const fileName = `${prefix}-${Date.now()}-${baseName}.${extension}`;
+  const scopeId = await resolveProjectUuidForStorage(projectId);
+  const path = buildOwnedObjectPath(ownerId, fileName, scopeId);
+
+  const { error } = await supabase.storage.from(bucket).upload(path, file, {
+    upsert: false,
+    contentType: contentType || file.type || "application/octet-stream",
+    cacheControl: "3600",
+  });
+  if (error) throw new Error(error.message);
+
+  return durableObjectUrl(bucket, path);
+}
+
+export async function resolveStorageAccessUrl(url: string): Promise<string> {
+  const trimmed = url.trim();
+  if (!trimmed) return "";
+
+  // Non-storage URLs (data:, blob:, external http(s) without /storage/) pass through.
+  if (
+    trimmed.startsWith("data:") ||
+    trimmed.startsWith("blob:") ||
+    !trimmed.includes("/storage/v1/object/")
+  ) {
+    return trimmed;
+  }
+
+  const parsed = parseStorageObjectUrl(trimmed);
+  if (!parsed) return "";
+
+  if (!isPrivateStorageBucket(parsed.bucket)) {
+    return durableObjectUrl(parsed.bucket, parsed.path);
+  }
+
+  const supabase = createClient();
+  const { data, error } = await supabase.storage
+    .from(parsed.bucket)
+    .createSignedUrl(parsed.path, SIGNED_URL_TTL_SECONDS);
+  if (error || !data?.signedUrl) {
+    return "";
+  }
+  return data.signedUrl;
+}
+
+export async function uploadImage(
+  bucket: StorageBucket,
+  ownerId: string,
+  file: File,
+  prefix = "image",
+  projectId?: string | null
+): Promise<string> {
+  assertImageFile(file);
+  return uploadOwnedObject(bucket, ownerId, file, prefix, projectId, file.type);
+}
+
+export async function uploadStorageFile(
+  bucket: StorageBucket,
+  ownerId: string,
+  file: File,
+  prefix = "file",
+  projectId?: string | null
+): Promise<string> {
+  assertMessageAttachmentFile(file);
+  assertNotExecutable(file);
+  if (!IMAGE_MIME.has(file.type) && !DOCUMENT_MIME.has(file.type)) {
+    throw new Error("Supported files: images, PDF, Word, Excel, or TXT (max 10MB).");
+  }
+  return uploadOwnedObject(bucket, ownerId, file, prefix, projectId, file.type);
+}
+
+export async function uploadAvatarImage(userId: string, file: File) {
+  return uploadImage(STORAGE_BUCKETS.avatars, userId, file, "avatar");
+}
+
+/** Intentionally public marketplace imagery (separate public bucket). */
+export async function uploadDesignerCoverImage(userId: string, file: File) {
+  return uploadImage(STORAGE_BUCKETS.designerPortfolios, userId, file, "cover");
+}
+
+/** Intentionally public marketplace imagery (separate public bucket). */
+export async function uploadDesignerPortfolioImage(userId: string, file: File) {
+  return uploadImage(STORAGE_BUCKETS.designerPortfolios, userId, file, "portfolio");
+}
+
+export async function uploadCustomerReferenceImage(
+  userId: string,
+  file: File,
+  projectId?: string | null
+) {
+  return uploadImage(STORAGE_BUCKETS.customerInspiration, userId, file, "reference", projectId);
+}
+
+/**
+ * Public marketplace testimonial photos — published into the public portfolios bucket,
+ * never the private customer-inspiration bucket.
+ */
+export async function uploadTestimonialPhoto(userId: string, file: File) {
+  return uploadImage(STORAGE_BUCKETS.designerPortfolios, userId, file, "testimonial");
+}
+
+export async function uploadProjectReferenceImage(
+  userId: string,
+  file: File,
+  projectId?: string | null
+) {
+  return uploadImage(STORAGE_BUCKETS.projectReferences, userId, file, "project-ref", projectId);
+}
+
+export async function uploadProjectProgressImage(
+  userId: string,
+  file: File,
+  projectId?: string | null
+) {
+  return uploadImage(STORAGE_BUCKETS.projectProgress, userId, file, "progress", projectId);
+}
+
+export async function uploadMessageAttachment(
+  userId: string,
+  file: File,
+  projectId?: string | null
+) {
+  return uploadStorageFile(STORAGE_BUCKETS.messageAttachments, userId, file, "message", projectId);
+}
+
+/** @deprecated Use uploadMessageAttachment */
+export async function uploadMessageAttachmentImage(userId: string, file: File) {
+  return uploadMessageAttachment(userId, file);
+}

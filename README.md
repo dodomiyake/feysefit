@@ -1,36 +1,103 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FeyseFit
+
+Premium mobile-first fashion technology MVP — remote measurements, project management, and designer marketplace.
+
+## Design System
+
+Built from the **FeyseFit Premium Design MVP** Stitch project with:
+
+- **Fonts:** Playfair Display (headlines) + Inter (body)
+- **Colors:** Dark Brown `#1c0900`, Soft Gold `#b38601`, Highlight Gold `#C8A45D`, Warm Cream `#FAF6EF`, Soft Beige `#EFE3D0`
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+cd feysefit
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Backend (API + Database)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+FeyseFit uses **Next.js Route Handlers**, **Prisma**, and **SQLite** for local development.
 
-## Learn More
+### Setup
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+cd feysefit
+cp .env.example .env
+npm install
+npm run db:push
+npm run db:seed
+npm run dev
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Check the API: [http://localhost:3000/api/health](http://localhost:3000/api/health)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### API endpoints
 
-## Deploy on Vercel
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/health` | Health + DB status |
+| GET | `/api/v1/projects` | List projects |
+| GET/PATCH | `/api/v1/projects/[id]` | Get / update project status |
+| POST | `/api/v1/projects/[id]/references` | Add customer style/fabric reference |
+| DELETE | `/api/v1/projects/[id]/references/[referenceId]` | Remove reference |
+| GET | `/api/v1/designers` | List designers |
+| GET | `/api/v1/customers` | List customers |
+| GET | `/api/v1/customers/[id]/link` | Customer designer link state |
+| GET/POST | `/api/v1/invites` | Pending invites |
+| GET | `/api/v1/unlink-requests` | Unlink requests |
+| GET/PATCH | `/api/v1/marketplace/approvals` | Marketplace approvals |
+| GET | `/api/v1/marketplace/live` | Live marketplace designer IDs |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Set `NEXT_PUBLIC_USE_API=true` in `.env` when wiring the frontend to the API (see `src/lib/api/client.ts`).
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Prototype Flows
+
+### Designer Flow
+Landing → Sign up → Designer onboarding → Designer dashboard → Invite customer → Create project → Project details → Messaging
+
+### Customer Flow
+Landing → Sign up/Login → Customer onboarding → Customer dashboard → Submit measurements → Project details → Messaging
+
+### Marketplace Flow
+Landing → Marketplace → Designer profile → Request design
+
+### Admin Flow
+Login (demo) → Admin dashboard → View designers → Approve/disable marketplace profile
+
+## Demo Access
+
+On the login page, use the demo buttons:
+- **Continue as Designer**
+- **Continue as Customer**
+- **Continue as Admin**
+
+## Screens
+
+| Screen | Route |
+|--------|-------|
+| Landing | `/` |
+| Sign Up | `/signup` |
+| Login | `/login` |
+| Designer Onboarding | `/onboarding/designer` |
+| Customer Onboarding | `/onboarding/customer` |
+| Designer Dashboard | `/dashboard/designer` |
+| Customer Dashboard | `/dashboard/customer` |
+| Admin Dashboard | `/dashboard/admin` |
+| Measurements | `/measurements` |
+| Projects | `/projects` |
+| Project Details | `/projects/[id]` |
+| Create Project | `/projects/new` |
+| Messages | `/messages` |
+| Marketplace | `/marketplace` |
+| Designer Profile | `/marketplace/[id]` |
+| Invite Customer | `/invite` |
+| Settings | `/settings` |
+
+## Stitch Project
+
+UI designs and HTML exports are available in Stitch project **FeyseFit Premium Design MVP** (ID: `121460024921328406`).

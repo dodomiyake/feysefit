@@ -1,26 +1,107 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* FeyseFit — Stitch warm cream palette */
+  --color-accent: #b38601;
+  --color-highlight: #c8a45d;
+  --color-brand-dark: #09090b;
+  --color-primary: #1c0900;
+  --color-background: #faf6ef;
+  --color-card: #efe3d0;
+  --color-surface: #faf2ee;
+  --color-surface-container: #f5ece8;
+  --color-outline: #82756d;
+  --color-ink-muted: #50453e;
+  /* Commission request defaults */
+  --color-commission-primary: #6e44ff;
+  --color-commission-secondary: #ffc2e2;
+  --font-headline: var(--font-playfair);
+  --font-body: var(--font-inter);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-background);
+  color: var(--color-primary);
+  font-family: var(--font-body), system-ui, sans-serif;
+}
+
+.font-headline {
+  font-family: var(--font-headline), Georgia, serif;
+}
+
+/* FeyseFit wordmark only — Inter bold, tight tracking */
+.font-brand {
+  font-family: var(--font-inter), system-ui, sans-serif;
+}
+
+.shadow-warm {
+  box-shadow: 0 4px 24px rgba(28, 9, 0, 0.08);
+}
+
+.hero-image-clip {
+  clip-path: polygon(0 0, 100% 0, 85% 100%, 0% 100%);
+}
+
+@keyframes landing-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.landing-reveal {
+  opacity: 0;
+  animation: landing-reveal 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.landing-reveal-delay-1 {
+  animation-delay: 0.2s;
+}
+
+.landing-reveal-delay-2 {
+  animation-delay: 0.4s;
+}
+
+.landing-reveal-delay-3 {
+  animation-delay: 0.6s;
+}
+
+@keyframes signup-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.signup-fade-in {
+  animation: signup-fade-in 0.8s ease-out forwards;
+}
+
+.signup-field {
+  @apply h-11 border-[#d3c3ba] bg-surface py-2.5 text-sm focus:border-accent focus:ring-1 focus:ring-accent;
+}
+
+/* Edge/IE native reveal duplicates our custom password eye toggle */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(28, 9, 0, 0.15);
+  border-radius: 3px;
 }

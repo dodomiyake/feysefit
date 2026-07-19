@@ -1,65 +1,94 @@
+import Link from "next/link";
 import Image from "next/image";
+import { ArrowRight, User } from "lucide-react";
+import { BrandLogo } from "@/components/ui/BrandLogo";
 
-export default function Home() {
+const HERO_IMAGE =
+  "https://lh3.googleusercontent.com/aida-public/AB6AXuCNlTOWD2b2kBKhpG-xvmHbUFya1uO91CGg_xNcr3uE1-Oc9ce3hnRdc5CzFzZeGu4t6auRHCDOap7dzm9FaAPbaQ5qEIE1cz0JhvQUbYB_9sfx1zzYPd2zIqqLxR9lViXQamB1PLHUVaLf5w7EwyKqaX321Zy8VY2v2OJU4nzjCTVq_6q-qK_PF_SWH5OZx67L8Nj1S3jJpyo1tZEiNGiCKwpFKQz5dBZZkCjBPn8URUZOYHfEwB6RLOsNiOMtyzOD5_KF6N9cbA";
+
+const ATELIER_MARKS = ["LUMEN", "KOTA", "AXEL"] as const;
+
+export default function LandingPage() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="flex min-h-screen w-full overflow-x-hidden lg:h-screen lg:overflow-hidden">
+      {/* Left: editorial hero (desktop) */}
+      <section className="hero-image-clip relative hidden overflow-hidden bg-surface lg:block lg:w-7/12">
+        <div className="absolute inset-0 z-10 bg-gradient-to-r from-primary/10 to-transparent" />
+        <div className="h-full w-full transition-transform duration-1000 ease-in-out hover:scale-105">
+          <Image
+            src={HERO_IMAGE}
+            alt="Model in exquisite African bespoke tailored garment"
+            fill
+            className="object-cover object-center"
+            priority
+            sizes="58vw"
+          />
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <div className="landing-reveal landing-reveal-delay-3 absolute bottom-12 left-12 z-20">
+          <div className="flex items-center gap-4">
+            <div className="h-px w-12 bg-white/60" />
+            <span className="text-sm font-medium uppercase tracking-[0.2em] text-white/80">
+              Est. 2026
+            </span>
+          </div>
         </div>
-      </main>
-    </div>
+      </section>
+
+      {/* Right: content & actions */}
+      <section className="relative flex w-full flex-col justify-center bg-background px-8 py-12 lg:w-5/12 lg:px-16 xl:px-24">
+        <div className="pointer-events-none absolute -right-32 -top-32 h-64 w-64 rounded-full bg-accent/5 blur-3xl" />
+
+        <div className="relative mx-auto w-full max-w-md space-y-8 lg:mx-0">
+          <div className="landing-reveal">
+            <BrandLogo className="text-4xl font-extrabold tracking-tight lg:text-5xl" />
+          </div>
+
+          <div className="space-y-4">
+            <h1 className="landing-reveal landing-reveal-delay-1 font-headline text-[2rem] font-semibold leading-10 text-primary">
+              Remote fashion measurements made simple
+            </h1>
+            <p className="landing-reveal landing-reveal-delay-1 max-w-sm text-lg leading-7 text-ink-muted">
+              Bridging the gap between bespoke designers and global clients through precision AI
+              measuring technology.
+            </p>
+          </div>
+
+          <div className="landing-reveal landing-reveal-delay-2 flex flex-col gap-4">
+            <Link
+              href="/signup?role=designer"
+              className="group flex items-center justify-between rounded-full bg-primary px-8 py-5 text-lg font-semibold text-white transition-all hover:bg-primary/90 active:scale-[0.98]"
+            >
+              <span>I&apos;m a Designer</span>
+              <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
+            </Link>
+            <Link
+              href="/signup?role=customer"
+              className="group flex items-center justify-between rounded-full border border-ink-muted/30 px-8 py-5 text-lg font-semibold text-primary transition-all hover:bg-surface-container active:scale-[0.98]"
+            >
+              <span>I&apos;m a Client</span>
+              <User className="h-5 w-5 transition-transform group-hover:translate-x-1" />
+            </Link>
+          </div>
+
+          <div className="landing-reveal landing-reveal-delay-3 border-t border-[#d3c3ba] pt-12">
+            <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-ink-muted">
+              Trusted by luxury ateliers
+            </p>
+            <div className="flex items-center gap-8 opacity-40 grayscale transition-all duration-500 hover:grayscale-0">
+              {ATELIER_MARKS.map((mark) => (
+                <span key={mark} className="font-headline text-2xl font-bold text-primary">
+                  {mark}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="absolute bottom-8 right-8 hidden items-center gap-2 lg:flex">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
+          <span className="text-xs font-semibold text-ink-muted">Precision AI V2.4 Active</span>
+        </div>
+      </section>
+    </main>
   );
 }

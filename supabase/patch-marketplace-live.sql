@@ -1,0 +1,8 @@
+-- Do not use this file on an empty database.
+--
+-- NEW SUPABASE PROJECT → run the ENTIRE file:
+--   supabase/schema.sql
+--
+-- If you already ran patch files and got errors, run:
+--   supabase/patch-bootstrap.sql
+-- then run the full supabase/schema.sql again.
