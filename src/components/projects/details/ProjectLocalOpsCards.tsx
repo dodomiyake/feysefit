@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import type { Project } from "@/lib/mock-data";
 import {
@@ -83,8 +83,11 @@ export function ProjectLocalOpsCards({ project }: ProjectLocalOpsCardsProps) {
 
   const [editingFittings, setEditingFittings] = useState(() => !hasSavedFittings);
   const [editingPayment, setEditingPayment] = useState(() => !hasSavedPayment);
+  const opsSyncKey = `${project.id}:${JSON.stringify(savedFittings)}:${JSON.stringify(savedPayment)}`;
+  const [prevOpsSyncKey, setPrevOpsSyncKey] = useState(opsSyncKey);
 
-  useEffect(() => {
+  if (opsSyncKey !== prevOpsSyncKey) {
+    setPrevOpsSyncKey(opsSyncKey);
     setConfirmedFittings(null);
     setConfirmedPayment(null);
     setFirstFittingAt(savedFittings.firstFittingAt);
@@ -103,7 +106,7 @@ export function ProjectLocalOpsCards({ project }: ProjectLocalOpsCardsProps) {
       paymentMethod: savedPayment.paymentMethod,
       paymentNotes: savedPayment.paymentNotes,
     }));
-  }, [project.id, savedFittings, savedPayment]);
+  }
 
   const balance = useMemo(() => {
     const total = totalPrice ? Number.parseFloat(totalPrice) : undefined;

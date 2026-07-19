@@ -91,7 +91,23 @@ export function SettingsSecurityCard({
   }, [onTwoFactorChange, twoFactorEnabled, useSupabase]);
 
   useEffect(() => {
-    void refreshMfa();
+    if (!useSupabase) return;
+    let cancelled = false;
+    void hasVerifiedTotp()
+      .then((ok) => {
+        if (cancelled) return;
+        setEnrolled(ok);
+        if (ok !== twoFactorEnabled) onTwoFactorChange(ok);
+      })
+      .catch(() => {
+        if (!cancelled) setEnrolled(false);
+      })
+      .finally(() => {
+        if (!cancelled) setCheckingMfa(false);
+      });
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [useSupabase]);
 

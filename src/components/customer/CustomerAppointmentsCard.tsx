@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Calendar } from "lucide-react";
 import { useApp } from "@/context/AppContext";
@@ -29,37 +29,48 @@ export function CustomerAppointmentsCard({
 }) {
   const { authUser, projects } = useApp();
   const customerId = authUser?.customerId;
-  const [appointments, setAppointments] = useState<StudioAppointment[]>([]);
-  const [loading, setLoading] = useState(true);
-
   const projectRefreshKey = projects
     .map((project) => `${project.id}:${project.customerUpdate}:${project.lastUpdated}`)
     .join("|");
+  const [appointments, setAppointments] = useState<StudioAppointment[]>([]);
+  const [loading, setLoading] = useState(Boolean(customerId));
+  const requestKey = `${customerId ?? ""}:${projectRefreshKey}`;
+  const [activeKey, setActiveKey] = useState(requestKey);
 
-  const loadAppointments = useCallback(async () => {
-    if (!customerId) {
-      setAppointments([]);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
-      const items = await listAppointmentsForCustomer(customerId);
-      setAppointments(items);
-    } finally {
-      setLoading(false);
-    }
-  }, [customerId]);
+  if (requestKey !== activeKey) {
+    setActiveKey(requestKey);
+    setLoading(Boolean(customerId));
+  }
+
+  if (!customerId && loading) {
+    setLoading(false);
+  }
 
   useEffect(() => {
-    void loadAppointments();
-  }, [loadAppointments, projectRefreshKey]);
+    if (!customerId) return;
+    let cancelled = false;
+    void listAppointmentsForCustomer(customerId)
+      .then((items) => {
+        if (!cancelled) setAppointments(items);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [customerId, projectRefreshKey]);
 
   useEffect(() => {
-    const refresh = () => void loadAppointments();
+    if (!customerId) return;
+    const refresh = () => {
+      void listAppointmentsForCustomer(customerId)
+        .then(setAppointments)
+        .catch(() => undefined);
+    };
     window.addEventListener("focus", refresh);
     return () => window.removeEventListener("focus", refresh);
-  }, [loadAppointments]);
+  }, [customerId]);
 
   if (!customerId || loading) return null;
 

@@ -26,7 +26,7 @@ export function PendingInvitesSidebar({ refreshKey = 0 }: PendingInvitesSidebarP
     void listInvites(authUser.designerId)
       .then((rows) => setInvites(rows.filter((invite) => invite.status === "pending")))
       .catch(() => undefined);
-  }, [useSupabase, useApi, authUser?.designerId]);
+  }, [useSupabase, useApi, authUser]);
 
   useEffect(() => {
     loadInvites();

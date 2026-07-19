@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
@@ -31,24 +31,28 @@ export function CustomerOnboardingContent({ mode = "invite" }: CustomerOnboardin
     authUser,
     refreshAppData,
   } = useApp();
+  const inviteParam = searchParams.get("invite") ?? searchParams.get("code");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [name, setName] = useState("");
+  const [name, setName] = useState(authUser?.name ?? "");
   const [location, setLocation] = useState("");
   const [phone, setPhone] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
+  const [inviteCode, setInviteCode] = useState(
+    inviteParam ? normalizeInviteCode(inviteParam) : ""
+  );
   const [styleNotes, setStyleNotes] = useState("");
+  const [prevAuthName, setPrevAuthName] = useState(authUser?.name ?? "");
+  const inviteKey = inviteParam ?? "";
+  const [prevInviteKey, setPrevInviteKey] = useState(inviteKey);
 
-  useEffect(() => {
-    if (authUser?.name) {
-      setName((current) => current || authUser.name);
-    }
-  }, [authUser?.name]);
+  if ((authUser?.name ?? "") !== prevAuthName) {
+    setPrevAuthName(authUser?.name ?? "");
+    if (authUser?.name && !name) setName(authUser.name);
+  }
 
-  useEffect(() => {
-    const inviteParam = searchParams.get("invite") ?? searchParams.get("code");
-    if (!inviteParam) return;
-    setInviteCode(normalizeInviteCode(inviteParam));
-  }, [searchParams]);
+  if (inviteKey !== prevInviteKey) {
+    setPrevInviteKey(inviteKey);
+    if (inviteParam) setInviteCode(normalizeInviteCode(inviteParam));
+  }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

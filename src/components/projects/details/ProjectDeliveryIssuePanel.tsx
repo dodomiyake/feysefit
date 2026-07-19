@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { Project } from "@/lib/mock-data";
 import type { ProjectStatus } from "@/lib/design-tokens";
 import { useApp } from "@/context/AppContext";
@@ -23,11 +23,14 @@ export function ProjectDeliveryIssuePanel({ project }: ProjectDeliveryIssuePanel
   const [response, setResponse] = useState(issue?.designerResponse ?? "");
   const [editing, setEditing] = useState(!issue?.designerResponse);
   const [submitting, setSubmitting] = useState(false);
+  const issueSyncKey = `${issue?.id ?? ""}:${issue?.designerResponse ?? ""}:${issue?.status ?? ""}:${issue?.updatedAt ?? ""}`;
+  const [prevIssueSyncKey, setPrevIssueSyncKey] = useState(issueSyncKey);
 
-  useEffect(() => {
+  if (issueSyncKey !== prevIssueSyncKey) {
+    setPrevIssueSyncKey(issueSyncKey);
     setResponse(issue?.designerResponse ?? "");
     setEditing(!issue?.designerResponse);
-  }, [issue?.id, issue?.designerResponse, issue?.status, issue?.updatedAt]);
+  }
 
   const isIssueStatus =
     project.status === "Issue Reported" || project.status === "Adjustment Needed";

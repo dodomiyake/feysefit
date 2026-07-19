@@ -36,10 +36,6 @@ export function DesignerClientMeasurementsView({
   const useSupabase = isSupabaseEnabled();
   const useRemote = useSupabase || isApiEnabled();
 
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
-  const [profile, setProfile] = useState<CustomerMeasurementProfile | null>(null);
-  const [loading, setLoading] = useState(false);
-
   const customerOptions = useMemo(
     () =>
       customers.map((customer) => ({
@@ -49,60 +45,65 @@ export function DesignerClientMeasurementsView({
     [customers]
   );
 
+  const preferredCustomerId = useMemo(() => {
+    if (!customers.length) return "";
+    if (initialCustomerId && customers.some((customer) => customer.id === initialCustomerId)) {
+      return initialCustomerId;
+    }
+    return customers[0].id;
+  }, [customers, initialCustomerId]);
+
+  const [selectedCustomerId, setSelectedCustomerId] = useState(preferredCustomerId);
+  const [trackedPreferred, setTrackedPreferred] = useState(preferredCustomerId);
+  const [remoteProfile, setRemoteProfile] = useState<CustomerMeasurementProfile | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadedForId, setLoadedForId] = useState<string | null>(null);
+
+  if (preferredCustomerId !== trackedPreferred) {
+    setTrackedPreferred(preferredCustomerId);
+    setSelectedCustomerId(preferredCustomerId);
+  }
+
   const selectedCustomer = useMemo(
     () => customers.find((customer) => customer.id === selectedCustomerId) ?? null,
     [customers, selectedCustomerId]
   );
 
-  useEffect(() => {
-    if (!customers.length) {
-      setSelectedCustomerId("");
-      return;
+  const offlineProfile = useMemo((): CustomerMeasurementProfile | null => {
+    if (!selectedCustomerId || useRemote) return null;
+    const projectWithMeasurements = projects.find(
+      (project) =>
+        (project.customerId === selectedCustomerId ||
+          project.customerName === selectedCustomer?.name) &&
+        project.measurements &&
+        Object.keys(project.measurements).length > 0
+    );
+    if (!projectWithMeasurements?.measurements) {
+      return emptyMeasurementProfile(selectedCustomerId);
     }
-    const preferred =
-      initialCustomerId && customers.some((customer) => customer.id === initialCustomerId)
-        ? initialCustomerId
-        : customers[0].id;
-    setSelectedCustomerId(preferred);
-  }, [customers, initialCustomerId]);
+    return {
+      customerId: selectedCustomerId,
+      unit: "inches",
+      preferredFit: "regular",
+      status: "submitted",
+      recordedBy: projectWithMeasurements.measurementRecordedBy ?? "customer",
+      values: Object.fromEntries(
+        Object.entries(projectWithMeasurements.measurements).map(([key, value]) => [
+          key,
+          value.replace(/"/g, ""),
+        ])
+      ),
+    };
+  }, [selectedCustomerId, useRemote, projects, selectedCustomer?.name]);
+
+  if (useRemote && selectedCustomerId && selectedCustomerId !== loadedForId && !loading) {
+    setLoading(true);
+  }
 
   useEffect(() => {
-    if (!selectedCustomerId) {
-      setProfile(null);
-      return;
-    }
-
-    if (!useRemote) {
-      const projectWithMeasurements = projects.find(
-        (project) =>
-          (project.customerId === selectedCustomerId ||
-            project.customerName === selectedCustomer?.name) &&
-          project.measurements &&
-          Object.keys(project.measurements).length > 0
-      );
-      setProfile(
-        projectWithMeasurements?.measurements
-          ? {
-              customerId: selectedCustomerId,
-              unit: "inches",
-              preferredFit: "regular",
-              status: "submitted",
-              recordedBy: projectWithMeasurements.measurementRecordedBy ?? "customer",
-              values: Object.fromEntries(
-                Object.entries(projectWithMeasurements.measurements).map(([key, value]) => [
-                  key,
-                  value.replace(/"/g, ""),
-                ])
-              ),
-            }
-          : emptyMeasurementProfile(selectedCustomerId)
-      );
-      return;
-    }
+    if (!selectedCustomerId || !useRemote) return;
 
     let cancelled = false;
-    setLoading(true);
-
     void (async () => {
       try {
         const next = useSupabase
@@ -110,10 +111,14 @@ export function DesignerClientMeasurementsView({
           : await import("@/lib/api/client").then((m) =>
               m.api.measurements.get(selectedCustomerId)
             );
-        if (!cancelled) setProfile(next);
+        if (!cancelled) {
+          setRemoteProfile(next);
+          setLoadedForId(selectedCustomerId);
+        }
       } catch (error) {
         if (!cancelled) {
-          setProfile(emptyMeasurementProfile(selectedCustomerId));
+          setRemoteProfile(emptyMeasurementProfile(selectedCustomerId));
+          setLoadedForId(selectedCustomerId);
           showToast(
             error instanceof Error ? error.message : "Could not load measurements",
             "error"
@@ -127,7 +132,9 @@ export function DesignerClientMeasurementsView({
     return () => {
       cancelled = true;
     };
-  }, [selectedCustomerId, useRemote, useSupabase, showToast, projects, selectedCustomer?.name]);
+  }, [selectedCustomerId, useRemote, useSupabase, showToast]);
+
+  const profile = useRemote ? remoteProfile : offlineProfile;
 
   if (customers.length === 0) {
     return (

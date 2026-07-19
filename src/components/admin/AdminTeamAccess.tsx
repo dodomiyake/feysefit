@@ -19,7 +19,7 @@ export function AdminTeamAccess() {
   const { ensureReauth } = useReauth();
   const useSupabase = isSupabaseEnabled();
   const [members, setMembers] = useState<AdminTeamMember[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(useSupabase);
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -29,9 +29,9 @@ export function AdminTeamAccess() {
       setLoading(false);
       return;
     }
-    setLoading(true);
     try {
-      setMembers(await listAdminTeamMembers());
+      const rows = await listAdminTeamMembers();
+      setMembers(rows);
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Could not load admin team", "error");
     } finally {
@@ -40,8 +40,24 @@ export function AdminTeamAccess() {
   }, [useSupabase, showToast]);
 
   useEffect(() => {
-    void loadMembers();
-  }, [loadMembers]);
+    if (!useSupabase) return;
+    let cancelled = false;
+    void listAdminTeamMembers()
+      .then((rows) => {
+        if (!cancelled) setMembers(rows);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          showToast(error instanceof Error ? error.message : "Could not load admin team", "error");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [useSupabase, showToast]);
 
   const handleGrant = async (e: React.FormEvent) => {
     e.preventDefault();

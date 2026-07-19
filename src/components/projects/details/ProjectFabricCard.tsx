@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Layers, Loader2, MessageSquareQuote } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -133,18 +133,25 @@ export function ProjectFabricCard({
   const [editingFabrics, setEditingFabrics] = useState(() => !hasSavedFabrics);
   const [editingAdvice, setEditingAdvice] = useState(() => !hasSavedAdvice);
 
-  useEffect(() => {
+  const fabricSyncKey = `${project.id}:${project.primaryFabric ?? ""}:${project.lining ?? ""}:${project.designerFabricAdvice ?? ""}`;
+  const [prevFabricSyncKey, setPrevFabricSyncKey] = useState(fabricSyncKey);
+  const fabricsFieldKey = `${savedPrimaryFabric ?? ""}:${savedSecondaryMaterial ?? ""}:${savedLining ?? ""}:${editingFabrics}`;
+  const [prevFabricsFieldKey, setPrevFabricsFieldKey] = useState(fabricsFieldKey);
+  const adviceFieldKey = `${savedAdvice}:${editingAdvice}`;
+  const [prevAdviceFieldKey, setPrevAdviceFieldKey] = useState(adviceFieldKey);
+
+  if (fabricSyncKey !== prevFabricSyncKey) {
+    setPrevFabricSyncKey(fabricSyncKey);
     setConfirmedFabrics(null);
     setConfirmedAdvice(null);
     const savedOnProject = Boolean(project.primaryFabric?.trim() && project.lining?.trim());
     setEditingFabrics(!savedOnProject);
     const savedAdviceOnProject = Boolean(project.designerFabricAdvice?.trim());
     setEditingAdvice(!savedAdviceOnProject);
-  }, [project.id, project.primaryFabric, project.lining, project.designerFabricAdvice]);
+  }
 
-  useEffect(() => {
-    if (editingFabrics) return;
-
+  if (!editingFabrics && fabricsFieldKey !== prevFabricsFieldKey) {
+    setPrevFabricsFieldKey(fabricsFieldKey);
     const primary = resolveFabricSelectValue(savedPrimaryFabric, PRIMARY_FABRIC_OPTIONS);
     const secondary = resolveFabricSelectValue(savedSecondaryMaterial, SECONDARY_MATERIAL_OPTIONS);
     const lining = resolveFabricSelectValue(savedLining, LINING_OPTIONS);
@@ -154,12 +161,16 @@ export function ProjectFabricCard({
     setSecondaryCustom(secondary.customText);
     setLiningSelect(lining.selectValue);
     setLiningCustom(lining.customText);
-  }, [savedPrimaryFabric, savedSecondaryMaterial, savedLining, editingFabrics]);
+  } else if (fabricsFieldKey !== prevFabricsFieldKey) {
+    setPrevFabricsFieldKey(fabricsFieldKey);
+  }
 
-  useEffect(() => {
-    if (editingAdvice) return;
+  if (!editingAdvice && adviceFieldKey !== prevAdviceFieldKey) {
+    setPrevAdviceFieldKey(adviceFieldKey);
     setAdviceDraft(savedAdvice);
-  }, [savedAdvice, editingAdvice]);
+  } else if (adviceFieldKey !== prevAdviceFieldKey) {
+    setPrevAdviceFieldKey(adviceFieldKey);
+  }
 
   const showFabricForm = canEditFabrics && (editingFabrics || !hasSavedFabrics);
   const showCustomerSummary = canEditFabrics && hasSavedFabrics && !editingFabrics;

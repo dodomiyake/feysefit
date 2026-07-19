@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import type { Project } from "@/lib/mock-data";
 import {
@@ -50,6 +50,8 @@ export function ProjectDeliveryCard({
   const [deliveryMethod, setDeliveryMethod] = useState(savedDelivery.deliveryMethod);
   const [localDeliveryStatus, setLocalDeliveryStatus] = useState(savedDelivery.localDeliveryStatus);
   const [confirmedDelivery, setConfirmedDelivery] = useState<typeof savedDelivery | null>(null);
+  const syncKey = `${project.id}:${savedDelivery.deliveryMethod}:${savedDelivery.localDeliveryStatus}:${canEdit}`;
+  const [prevSyncKey, setPrevSyncKey] = useState(syncKey);
 
   const displayDelivery = confirmedDelivery ?? savedDelivery;
   const hasSavedDelivery = hasDeliveryData({
@@ -66,7 +68,8 @@ export function ProjectDeliveryCard({
       })
   );
 
-  useEffect(() => {
+  if (syncKey !== prevSyncKey) {
+    setPrevSyncKey(syncKey);
     setConfirmedDelivery(null);
     setDeliveryMethod(savedDelivery.deliveryMethod);
     setLocalDeliveryStatus(savedDelivery.localDeliveryStatus);
@@ -77,7 +80,7 @@ export function ProjectDeliveryCard({
           localDeliveryStatus: savedDelivery.localDeliveryStatus as LocalDeliveryStatus | undefined,
         })
     );
-  }, [project.id, savedDelivery, canEdit]);
+  }
 
   if (!canEdit && !hasSavedDelivery) {
     return null;

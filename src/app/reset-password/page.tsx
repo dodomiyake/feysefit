@@ -20,17 +20,14 @@ export default function ResetPasswordPage() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(!useSupabase);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!useSupabase) {
-      setReady(true);
-      return;
-    }
+    if (!useSupabase) return;
     void createClient()
       .auth.getSession()
-      .then(({ data }) => setReady(true))
+      .then(() => setReady(true))
       .catch(() => setReady(true));
   }, [useSupabase]);
 

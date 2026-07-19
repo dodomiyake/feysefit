@@ -11,6 +11,13 @@ export function AdminRouteGuard({ children }: { children: React.ReactNode }) {
   const { role, hydrated } = useApp();
   const { ensureReauth } = useReauth();
   const [reauthOk, setReauthOk] = useState(false);
+  const shouldReauth = hydrated && role === "admin";
+  const [prevShouldReauth, setPrevShouldReauth] = useState(shouldReauth);
+
+  if (prevShouldReauth !== shouldReauth) {
+    setPrevShouldReauth(shouldReauth);
+    if (!shouldReauth && reauthOk) setReauthOk(false);
+  }
 
   useEffect(() => {
     if (!hydrated) return;
@@ -19,10 +26,7 @@ export function AdminRouteGuard({ children }: { children: React.ReactNode }) {
   }, [hydrated, role, router]);
 
   useEffect(() => {
-    if (!hydrated || role !== "admin") {
-      setReauthOk(false);
-      return;
-    }
+    if (!shouldReauth) return;
 
     let cancelled = false;
     void (async () => {
@@ -36,7 +40,7 @@ export function AdminRouteGuard({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [hydrated, role, ensureReauth, router]);
+  }, [shouldReauth, ensureReauth, router]);
 
   if (!hydrated) {
     return (

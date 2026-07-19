@@ -40,13 +40,11 @@ export function NotificationButton({ variant = "header", className }: Notificati
   } = useApp();
   const useSupabase = isSupabaseEnabled();
   const [open, setOpen] = useState(false);
-  const [readIds, setReadIds] = useState<string[]>([]);
+  const [readIds, setReadIds] = useState<string[]>(() =>
+    typeof window === "undefined" ? [] : readStoredNotificationIds()
+  );
   const [messageNotifications, setMessageNotifications] = useState<AppNotification[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setReadIds(readStoredNotificationIds());
-  }, []);
 
   const loadMessageNotifications = useCallback(async () => {
     if (!useSupabase || !authUser) {
@@ -62,12 +60,34 @@ export function NotificationButton({ variant = "header", className }: Notificati
   }, [authUser, useSupabase]);
 
   useEffect(() => {
-    void loadMessageNotifications();
-  }, [loadMessageNotifications]);
+    if (!useSupabase || !authUser) return;
+    let cancelled = false;
+    void listMessageNotifications(authUser)
+      .then((items) => {
+        if (!cancelled) setMessageNotifications(items);
+      })
+      .catch(() => {
+        if (!cancelled) setMessageNotifications([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser, useSupabase]);
 
   useEffect(() => {
-    if (open) void loadMessageNotifications();
-  }, [open, loadMessageNotifications]);
+    if (!open || !useSupabase || !authUser) return;
+    let cancelled = false;
+    void listMessageNotifications(authUser)
+      .then((items) => {
+        if (!cancelled) setMessageNotifications(items);
+      })
+      .catch(() => {
+        if (!cancelled) setMessageNotifications([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, authUser, useSupabase]);
 
   const handleIncomingMessage = useCallback(
     (_projectUuid: string, message: ThreadMessage) => {

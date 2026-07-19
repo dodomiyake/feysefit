@@ -51,7 +51,6 @@ export function MessagesWorkspace() {
 
   const loadConversations = useCallback(async () => {
     if (!useSupabase && !useApi) return;
-    setLoading(true);
     try {
       if (useSupabase) {
         if (designerId) {
@@ -86,11 +85,57 @@ export function MessagesWorkspace() {
     } finally {
       setLoading(false);
     }
-  }, [useApi, useSupabase, designerId, role, authUser]);
+  }, [useApi, useSupabase, designerId, role, authUser, setApiConversations]);
+
+  const loadKey = `${useApi}:${useSupabase}:${designerId ?? ""}:${role ?? ""}:${authUser?.id ?? ""}`;
+  const [prevLoadKey, setPrevLoadKey] = useState(loadKey);
+  if (loadKey !== prevLoadKey) {
+    setPrevLoadKey(loadKey);
+    if (useApi || useSupabase) setLoading(true);
+  }
 
   useEffect(() => {
-    void loadConversations();
-  }, [loadConversations]);
+    if (!useSupabase && !useApi) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        let next: Conversation[] = [];
+        if (useSupabase) {
+          if (designerId) {
+            const thread = await getOrCreateDesignerConversation(
+              designerId,
+              authUser?.name ?? "You"
+            );
+            const list = await listConversations(authUser);
+            next = list.some((c) => c.id === thread.id) ? list : [thread, ...list];
+          } else {
+            next = await listConversations(authUser);
+          }
+        } else if (designerId) {
+          const thread = await api.conversations.createDesignerThread(designerId);
+          const list = await api.conversations.list({
+            designerId: role === "designer" ? authUser?.designerId : undefined,
+            customerId: role === "customer" ? authUser?.customerId : undefined,
+          });
+          next = list.some((c) => c.id === thread.id) ? list : [thread, ...list];
+        } else {
+          next = await api.conversations.list({
+            designerId: role === "designer" ? authUser?.designerId : undefined,
+            customerId: role === "customer" ? authUser?.customerId : undefined,
+          });
+        }
+        if (!cancelled) setApiConversations(next);
+      } catch (error) {
+        console.error("Failed to load conversations", error);
+        if (!cancelled) setApiConversations([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [useApi, useSupabase, designerId, role, authUser]);
 
   const handleIncomingMessage = useCallback(
     (projectUuid: string, message: ThreadMessage) => {
@@ -103,7 +148,7 @@ export function MessagesWorkspace() {
         return mergeMessageIntoConversations(prev, projectUuid, message);
       });
     },
-    [loadConversations]
+    [loadConversations, setApiConversations]
   );
 
   useProjectMessagesRealtime(useSupabase && !loading, handleIncomingMessage);

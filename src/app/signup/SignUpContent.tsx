@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
@@ -52,31 +52,39 @@ export default function SignUpPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { setRole, showToast, login } = useApp();
+  const inviteParam = searchParams.get("invite") ?? searchParams.get("code");
+  const inviteKey = inviteParam ?? "";
   const [role, setLocalRole] = useState<"designer" | "customer">(
-    (searchParams.get("role") as "designer" | "customer") || "designer"
+    inviteParam
+      ? "customer"
+      : (searchParams.get("role") as "designer" | "customer") || "designer"
   );
-  const [customerPath, setCustomerPath] = useState<"invite" | "direct">("direct");
+  const [customerPath, setCustomerPath] = useState<"invite" | "direct">(
+    inviteParam ? "invite" : "direct"
+  );
   const [showPassword, setShowPassword] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [termsError, setTermsError] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
+  const [inviteCode, setInviteCode] = useState(
+    inviteParam ? normalizeInviteCode(inviteParam) : ""
+  );
+  const [prevInviteKey, setPrevInviteKey] = useState(inviteKey);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const useSupabase = isSupabaseEnabled();
   const abuse = useAuthAbuseGuard("signup", email);
 
-  useEffect(() => {
-    const inviteParam = searchParams.get("invite") ?? searchParams.get("code");
-    if (!inviteParam) return;
-
-    const normalized = normalizeInviteCode(inviteParam);
-    setLocalRole("customer");
-    setCustomerPath("invite");
-    setInviteCode(normalized);
-  }, [searchParams]);
+  if (inviteKey !== prevInviteKey) {
+    setPrevInviteKey(inviteKey);
+    if (inviteParam) {
+      setLocalRole("customer");
+      setCustomerPath("invite");
+      setInviteCode(normalizeInviteCode(inviteParam));
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

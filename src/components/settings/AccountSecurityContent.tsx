@@ -127,8 +127,32 @@ export function AccountSecurityContent() {
   }, [useSupabase]);
 
   useEffect(() => {
-    void refreshMeta();
-  }, [refreshMeta]);
+    if (!useSupabase) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [changedAt, enrolled, rows] = await Promise.all([
+          getPasswordChangedAt(),
+          hasVerifiedTotp(),
+          listMyAccountActivity(50),
+        ]);
+        if (cancelled) return;
+        setPasswordChangedAt(changedAt);
+        setMfaEnrolled(enrolled);
+        setActivity(rows);
+      } catch {
+        // Tables may not be deployed yet.
+      } finally {
+        if (!cancelled) {
+          setMfaChecking(false);
+          setActivityLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [useSupabase]);
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

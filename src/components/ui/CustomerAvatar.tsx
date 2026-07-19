@@ -26,23 +26,25 @@ export function CustomerAvatar({
   className,
 }: CustomerAvatarProps) {
   const trimmed = profileImage?.trim() ?? "";
-  const [src, setSrc] = useState(trimmed);
+  const [resolved, setResolved] = useState("");
+  const [resolvedFor, setResolvedFor] = useState("");
 
   useEffect(() => {
-    if (!trimmed) {
-      setSrc("");
-      return;
-    }
+    if (!trimmed) return;
 
     let cancelled = false;
-    void resolveStorageAccessUrl(trimmed).then((resolved) => {
-      if (!cancelled) setSrc(resolved);
+    void resolveStorageAccessUrl(trimmed).then((next) => {
+      if (cancelled) return;
+      setResolved(next);
+      setResolvedFor(trimmed);
     });
 
     return () => {
       cancelled = true;
     };
   }, [trimmed]);
+
+  const src = !trimmed ? "" : resolvedFor === trimmed ? resolved : trimmed;
 
   return (
     <div

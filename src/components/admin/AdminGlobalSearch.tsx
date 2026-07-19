@@ -24,16 +24,18 @@ export function AdminGlobalSearch() {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [prevQuery, setPrevQuery] = useState(query);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  if (query !== prevQuery) {
+    setPrevQuery(query);
+    setActiveIndex(0);
+  }
 
   const results = useMemo(
     () => searchAdminDirectory(query, { designers, customers, projects }),
     [query, designers, customers, projects]
   );
-
-  useEffect(() => {
-    setActiveIndex(0);
-  }, [query]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {

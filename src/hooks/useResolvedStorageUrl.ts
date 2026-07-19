@@ -6,42 +6,45 @@ import { isPrivateStorageUrl } from "@/lib/storage/storage-url";
 
 /** Resolve private Supabase storage URLs to fresh signed URLs for display. */
 export function useResolvedStorageUrl(url: string | null | undefined): string {
+  const next = url?.trim() ?? "";
+  const needsResolve = Boolean(next && isPrivateStorageUrl(next));
   const [resolved, setResolved] = useState("");
+  const [resolvedFor, setResolvedFor] = useState("");
 
   useEffect(() => {
-    const next = url?.trim() ?? "";
-    if (!next) {
-      setResolved("");
-      return;
-    }
-    if (!isPrivateStorageUrl(next)) {
-      setResolved(next);
-      return;
-    }
+    if (!needsResolve) return;
 
-    setResolved("");
     let cancelled = false;
     void resolveStorageAccessUrl(next).then((value) => {
-      if (!cancelled) setResolved(value);
+      if (cancelled) return;
+      setResolved(value);
+      setResolvedFor(next);
     });
     return () => {
       cancelled = true;
     };
-  }, [url]);
+  }, [next, needsResolve]);
 
-  return resolved;
+  if (!needsResolve) return next;
+  return resolvedFor === next ? resolved : "";
 }
 
 export function useResolvedStorageUrls(urls: string[]): string[] {
   const key = useMemo(() => urls.join("\0"), [urls]);
+  const list = useMemo(() => (key ? key.split("\0") : []), [key]);
+  const needsAsync = list.some((url) => {
+    const trimmed = url.trim();
+    return Boolean(trimmed && isPrivateStorageUrl(trimmed));
+  });
+  const syncResolved = useMemo(
+    () => list.map((url) => url.trim()),
+    [list]
+  );
   const [resolved, setResolved] = useState<string[]>([]);
+  const [resolvedFor, setResolvedFor] = useState("");
 
   useEffect(() => {
-    const list = key ? key.split("\0") : [];
-    if (list.length === 0) {
-      setResolved([]);
-      return;
-    }
+    if (list.length === 0 || !needsAsync) return;
 
     let cancelled = false;
     void (async () => {
@@ -52,12 +55,16 @@ export function useResolvedStorageUrls(urls: string[]): string[] {
           return resolveStorageAccessUrl(trimmed);
         })
       );
-      if (!cancelled) setResolved(next);
+      if (cancelled) return;
+      setResolved(next);
+      setResolvedFor(key);
     })();
     return () => {
       cancelled = true;
     };
-  }, [key]);
+  }, [key, list, needsAsync]);
 
-  return resolved;
+  if (list.length === 0) return [];
+  if (!needsAsync) return syncResolved;
+  return resolvedFor === key ? resolved : syncResolved.map(() => "");
 }

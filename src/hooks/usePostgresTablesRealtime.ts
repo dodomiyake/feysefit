@@ -19,7 +19,9 @@ export function usePostgresTablesRealtime(
   const instanceId = useId();
   const onChangeRef = useRef(onChange);
 
-  onChangeRef.current = onChange;
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   useEffect(() => {
     if (!enabled || !tables.length) return;

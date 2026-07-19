@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { StickyNote } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -14,12 +14,14 @@ interface AdminUserNotesCardProps {
 
 export function AdminUserNotesCard({ notes, onSave, readOnly }: AdminUserNotesCardProps) {
   const [draft, setDraft] = useState(notes);
+  const [prevNotes, setPrevNotes] = useState(notes);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  if (notes !== prevNotes) {
+    setPrevNotes(notes);
     setDraft(notes);
-  }, [notes]);
+  }
 
   const dirty = draft.trim() !== notes.trim();
 

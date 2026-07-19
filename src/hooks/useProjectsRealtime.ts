@@ -11,7 +11,9 @@ export function useProjectsRealtime(
   const instanceId = useId();
   const onChangeRef = useRef(onChange);
 
-  onChangeRef.current = onChange;
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   useEffect(() => {
     if (!enabled) return;

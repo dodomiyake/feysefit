@@ -15,14 +15,21 @@ function AttachmentLink({
   file: MessageAttachment;
   children: React.ReactNode;
 }) {
-  const [href, setHref] = useState(file.url ?? "#");
+  const publicHref = file.url && !isPrivateStorageUrl(file.url) ? file.url : null;
+  const [resolvedHref, setResolvedHref] = useState<string | null>(null);
+  const [resolvedFor, setResolvedFor] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!file.url || !isPrivateStorageUrl(file.url)) {
-      setHref(file.url ?? "#");
-      return;
-    }
-    void resolveStorageAccessUrl(file.url).then(setHref);
+    if (!file.url || !isPrivateStorageUrl(file.url)) return;
+    let cancelled = false;
+    void resolveStorageAccessUrl(file.url).then((value) => {
+      if (cancelled) return;
+      setResolvedHref(value);
+      setResolvedFor(file.url ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [file.url]);
 
   if (!file.url) {
@@ -32,6 +39,9 @@ function AttachmentLink({
       </div>
     );
   }
+
+  const href =
+    publicHref ?? (resolvedFor === file.url && resolvedHref ? resolvedHref : "#");
 
   return (
     <Link
@@ -46,15 +56,24 @@ function AttachmentLink({
 }
 
 function AttachmentImage({ url, alt }: { url: string; alt: string }) {
-  const [src, setSrc] = useState(url);
+  const needsResolve = isPrivateStorageUrl(url);
+  const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
+  const [resolvedFor, setResolvedFor] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isPrivateStorageUrl(url)) {
-      setSrc(url);
-      return;
-    }
-    void resolveStorageAccessUrl(url).then(setSrc);
-  }, [url]);
+    if (!needsResolve) return;
+    let cancelled = false;
+    void resolveStorageAccessUrl(url).then((value) => {
+      if (cancelled) return;
+      setResolvedSrc(value);
+      setResolvedFor(url);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [url, needsResolve]);
+
+  const src = needsResolve ? (resolvedFor === url && resolvedSrc ? resolvedSrc : url) : url;
 
   return (
     <div className="relative h-full w-full">

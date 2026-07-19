@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { DEFAULT_LIST_PAGE_SIZE, paginateItems } from "@/lib/list-pagination";
 
 export function useListPagination<T>(
@@ -9,18 +9,20 @@ export function useListPagination<T>(
   resetKey?: string
 ) {
   const [page, setPage] = useState(1);
+  const [prevResetKey, setPrevResetKey] = useState(resetKey);
+  const [prevLength, setPrevLength] = useState(items.length);
 
-  useEffect(() => {
+  if (resetKey !== prevResetKey || items.length !== prevLength) {
+    setPrevResetKey(resetKey);
+    setPrevLength(items.length);
     setPage(1);
-  }, [resetKey, items.length]);
+  }
 
   const result = useMemo(() => paginateItems(items, page, pageSize), [items, page, pageSize]);
 
-  useEffect(() => {
-    if (page > result.totalPages) {
-      setPage(result.totalPages);
-    }
-  }, [page, result.totalPages]);
+  if (page > result.totalPages) {
+    setPage(result.totalPages);
+  }
 
   return {
     ...result,

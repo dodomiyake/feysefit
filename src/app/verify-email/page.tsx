@@ -21,12 +21,14 @@ function VerifyEmailContent() {
   const useSupabase = isSupabaseEnabled();
   const emailParam = searchParams.get("email") ?? "";
   const [email, setEmail] = useState(emailParam);
+  const [prevEmailParam, setPrevEmailParam] = useState(emailParam);
   const [submitting, setSubmitting] = useState(false);
   const abuse = useAuthAbuseGuard("verification_resend", email);
 
-  useEffect(() => {
+  if (emailParam !== prevEmailParam) {
+    setPrevEmailParam(emailParam);
     if (emailParam) setEmail(emailParam);
-  }, [emailParam]);
+  }
 
   useEffect(() => {
     if (!hydrated) return;

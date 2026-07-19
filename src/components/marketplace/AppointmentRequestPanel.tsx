@@ -51,7 +51,6 @@ export function AppointmentRequestPanel({ designer }: { designer: Designer }) {
   );
 
   const loadBookingData = useCallback(async () => {
-    setLoadingAvailability(true);
     try {
       const [settings, holds] = await Promise.all([
         getDesignerAvailability(designer.id),
@@ -68,10 +67,38 @@ export function AppointmentRequestPanel({ designer }: { designer: Designer }) {
     }
   }, [designer.id]);
 
+  const [prevCanBook, setPrevCanBook] = useState(canBook);
+  if (canBook !== prevCanBook) {
+    setPrevCanBook(canBook);
+    if (canBook) setLoadingAvailability(true);
+  }
+
   useEffect(() => {
     if (!canBook) return;
-    void loadBookingData();
-  }, [canBook, loadBookingData]);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [settings, holds] = await Promise.all([
+          getDesignerAvailability(designer.id),
+          listDesignerBookedSlots(designer.id),
+        ]);
+        if (cancelled) return;
+        setAvailability(settings);
+        setBookedSlots(holds);
+      } catch (error) {
+        console.error("Could not load designer availability", error);
+        if (!cancelled) {
+          setAvailability(null);
+          setBookedSlots([]);
+        }
+      } finally {
+        if (!cancelled) setLoadingAvailability(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [canBook, designer.id]);
 
   const meetingModes = useMemo(() => {
     const fromDesigner = meetingModesForDesigner({

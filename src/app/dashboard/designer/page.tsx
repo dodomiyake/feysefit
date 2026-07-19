@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { DesignerShell } from "@/components/layout/DesignerShell";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { DesignerStatCards } from "@/components/designer/DesignerStatCards";
@@ -22,11 +22,7 @@ export default function DesignerDashboardPage() {
   const designer = authUser?.designerId ? getDesignerById(authUser.designerId) : undefined;
   const firstName =
     designer?.designerName?.split(" ")[0] ?? authUser?.name?.split(" ")[0] ?? "there";
-  const [greeting, setGreeting] = useState("Good day");
-
-  useEffect(() => {
-    setGreeting(getTimeOfDayGreeting());
-  }, []);
+  const [greeting] = useState(() => getTimeOfDayGreeting());
 
   return (
     <DesignerShell>

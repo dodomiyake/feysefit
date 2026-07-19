@@ -49,8 +49,6 @@ export function AppCustomerProfileView({ customer }: AppCustomerProfileViewProps
   const { projects } = useApp();
   const useSupabase = isSupabaseEnabled();
   const useRemote = useSupabase || isApiEnabled();
-  const [profile, setProfile] = useState<CustomerMeasurementProfile | null>(null);
-  const [loadingMeasurements, setLoadingMeasurements] = useState(false);
 
   const customerProjects = useMemo(
     () => projects.filter((project) => project.customerId === customer.id),
@@ -60,46 +58,54 @@ export function AppCustomerProfileView({ customer }: AppCustomerProfileViewProps
   const messageHref = customerMessageThreadHref(customer.id, projects);
   const measurementsHref = `/clients/measurements?customer=${encodeURIComponent(customer.id)}`;
 
+  const offlineProfile = useMemo((): CustomerMeasurementProfile | null => {
+    if (useRemote) return null;
+    const projectWithMeasurements = customerProjects.find(
+      (project) => project.measurements && Object.keys(project.measurements).length > 0
+    );
+    if (!projectWithMeasurements?.measurements) return null;
+    return {
+      customerId: customer.id,
+      unit: "inches",
+      preferredFit: "regular",
+      status: "submitted",
+      recordedBy: projectWithMeasurements.measurementRecordedBy ?? "customer",
+      values: Object.fromEntries(
+        Object.entries(projectWithMeasurements.measurements).map(([key, value]) => [
+          key,
+          value.replace(/"/g, ""),
+        ])
+      ),
+    };
+  }, [useRemote, customerProjects, customer.id]);
+
+  const [remoteProfile, setRemoteProfile] = useState<CustomerMeasurementProfile | null>(null);
+  const [loadingMeasurements, setLoadingMeasurements] = useState(useRemote);
+  const [loadedCustomerId, setLoadedCustomerId] = useState<string | null>(null);
+
+  if (useRemote && customer.id !== loadedCustomerId && !loadingMeasurements) {
+    setLoadingMeasurements(true);
+  }
+
   useEffect(() => {
-    if (!useRemote) {
-      const projectWithMeasurements = customerProjects.find(
-        (project) => project.measurements && Object.keys(project.measurements).length > 0
-      );
-      setProfile(
-        projectWithMeasurements?.measurements
-          ? {
-              customerId: customer.id,
-              unit: "inches",
-              preferredFit: "regular",
-              status: "submitted",
-              recordedBy: projectWithMeasurements.measurementRecordedBy ?? "customer",
-              values: Object.fromEntries(
-                Object.entries(projectWithMeasurements.measurements).map(([key, value]) => [
-                  key,
-                  value.replace(/"/g, ""),
-                ])
-              ),
-            }
-          : null
-      );
-      return;
-    }
+    if (!useRemote) return;
 
     let cancelled = false;
-    setLoadingMeasurements(true);
-
     void (async () => {
       try {
         const next = useSupabase
           ? await getMeasurementProfile(customer.id)
           : await import("@/lib/api/client").then((m) => m.api.measurements.get(customer.id));
-        if (!cancelled) {
-          setProfile(
-            Object.values(next.values).some((value) => value.trim().length > 0) ? next : null
-          );
-        }
+        if (cancelled) return;
+        setRemoteProfile(
+          Object.values(next.values).some((value) => value.trim().length > 0) ? next : null
+        );
+        setLoadedCustomerId(customer.id);
       } catch {
-        if (!cancelled) setProfile(null);
+        if (!cancelled) {
+          setRemoteProfile(null);
+          setLoadedCustomerId(customer.id);
+        }
       } finally {
         if (!cancelled) setLoadingMeasurements(false);
       }
@@ -108,8 +114,9 @@ export function AppCustomerProfileView({ customer }: AppCustomerProfileViewProps
     return () => {
       cancelled = true;
     };
-  }, [customer.id, customerProjects, useRemote, useSupabase]);
+  }, [customer.id, useRemote, useSupabase]);
 
+  const profile = useRemote ? remoteProfile : offlineProfile;
   const unitLabel = profile?.unit === "cm" ? "cm" : "in";
   const filledMeasurementSections = profile
     ? measurementSections

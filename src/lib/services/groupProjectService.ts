@@ -107,7 +107,7 @@ export async function listGroupProjects(designerLegacyId: string): Promise<Group
   if (error) throw new Error(error.message);
 
   const groupIds = (data ?? []).map((row) => row.id);
-  let memberCounts = new Map<string, number>();
+  const memberCounts = new Map<string, number>();
   if (groupIds.length) {
     const { data: members } = await supabase
       .from("group_project_members")

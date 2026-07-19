@@ -114,7 +114,7 @@ export default function MeasurementsPage() {
         );
       }
     },
-    [useRemote, useSupabase, customerId, measurementUnit, preferredFit, values, showToast, authUser?.name, syncProjects]
+    [useRemote, useSupabase, customerId, measurementUnit, preferredFit, values, showToast, authUser, syncProjects]
   );
 
   const profileReady = ready || !useRemote;

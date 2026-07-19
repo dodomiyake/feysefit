@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useApp } from "@/context/AppContext";
 import { CreateAppointmentForm } from "@/components/designer/CreateAppointmentForm";
@@ -25,9 +25,8 @@ export function AppointmentsManager() {
     () => Boolean(searchParams.get("studioClient") || searchParams.get("customer"))
   );
 
-  useEffect(() => {
-    setSelectedDayKey((current) => current || getDefaultAppointmentDayKey(appointments));
-  }, [appointments]);
+  const defaultDayKey = getDefaultAppointmentDayKey(appointments);
+  const effectiveDayKey = selectedDayKey || defaultDayKey;
 
   const clientNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -51,11 +50,11 @@ export function AppointmentsManager() {
   }, [appointments, filter]);
 
   const listAppointments = useMemo(() => {
-    if (!selectedDayKey && listScope === "day") return [];
+    if (!effectiveDayKey && listScope === "day") return [];
 
     if (listScope === "all") return visible;
 
-    const onSelectedDay = filterAppointmentsForDay(visible, selectedDayKey);
+    const onSelectedDay = filterAppointmentsForDay(visible, effectiveDayKey);
     const flexible = visible.filter(
       (appointment) => isPendingCustomerRequest(appointment) && !appointment.scheduledAt
     );
@@ -64,7 +63,7 @@ export function AppointmentsManager() {
       merged.set(appointment.id, appointment);
     }
     return [...merged.values()];
-  }, [visible, listScope, selectedDayKey]);
+  }, [visible, listScope, effectiveDayKey]);
 
   const requestedCount = appointments.filter((item) => isPendingCustomerRequest(item)).length;
   const designerName =
@@ -72,8 +71,8 @@ export function AppointmentsManager() {
     authUser?.name ??
     "Studio";
 
-  const selectedDayCount = selectedDayKey
-    ? filterAppointmentsForDay(visible, selectedDayKey).length
+  const selectedDayCount = effectiveDayKey
+    ? filterAppointmentsForDay(visible, effectiveDayKey).length
     : 0;
 
   return (
@@ -140,12 +139,12 @@ export function AppointmentsManager() {
         )}
       </div>
 
-      {selectedDayKey ? (
+      {effectiveDayKey ? (
         <AppointmentDayPrint
           appointments={appointments}
           studioClients={studioClients}
           designerName={designerName}
-          dayKey={selectedDayKey}
+          dayKey={effectiveDayKey}
           onDayKeyChange={setSelectedDayKey}
         />
       ) : (
@@ -154,12 +153,12 @@ export function AppointmentsManager() {
         </section>
       )}
 
-      {!selectedDayKey ? null : listAppointments.length === 0 ? (
+      {!effectiveDayKey ? null : listAppointments.length === 0 ? (
         <div className="rounded-xl bg-surface-container p-8 text-center text-primary/60">
           <p>No appointments to show.</p>
           <p className="mt-2 text-sm">
             {listScope === "day"
-              ? `Nothing scheduled for ${selectedDayKey === toLocalDateKey(new Date()) ? "today" : "this day"}. Try All days or pick another date above.`
+              ? `Nothing scheduled for ${effectiveDayKey === toLocalDateKey(new Date()) ? "today" : "this day"}. Try All days or pick another date above.`
               : "Schedule a walk-in client or wait for a client request."}
           </p>
         </div>
@@ -170,7 +169,7 @@ export function AppointmentsManager() {
           designerId={designerId}
           onUpdated={() => void refreshAppData()}
           onToast={showToast}
-          focusDayKey={listScope === "day" ? selectedDayKey : null}
+          focusDayKey={listScope === "day" ? effectiveDayKey : null}
         />
       )}
 

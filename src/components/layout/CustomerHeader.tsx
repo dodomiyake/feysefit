@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -18,15 +18,14 @@ function CustomerHeaderInner() {
   const customer = resolveCurrentCustomer(customers, authUser);
   const displayName = customer?.name ?? authUser?.name ?? "Client";
   const isMarketplace = pathname.startsWith("/marketplace");
-  const [searchValue, setSearchValue] = useState("");
+  const searchFromUrl = isMarketplace ? (searchParams.get("q") ?? "") : "";
+  const [searchValue, setSearchValue] = useState(searchFromUrl);
+  const [prevSearchFromUrl, setPrevSearchFromUrl] = useState(searchFromUrl);
 
-  useEffect(() => {
-    if (isMarketplace) {
-      setSearchValue(searchParams.get("q") ?? "");
-    } else {
-      setSearchValue("");
-    }
-  }, [isMarketplace, searchParams]);
+  if (searchFromUrl !== prevSearchFromUrl) {
+    setPrevSearchFromUrl(searchFromUrl);
+    setSearchValue(searchFromUrl);
+  }
 
   const handleSearchChange = (value: string) => {
     setSearchValue(value);

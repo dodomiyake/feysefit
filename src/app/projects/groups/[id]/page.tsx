@@ -28,29 +28,44 @@ export default function GroupProjectDetailPage({
   const [group, setGroup] = useState<GroupProject | null>(null);
   const [members, setMembers] = useState<GroupProjectMember[]>([]);
   const [memberName, setMemberName] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(designerId));
   const [adding, setAdding] = useState(false);
+  const requestKey = `${designerId}:${id}`;
+  const [activeKey, setActiveKey] = useState(requestKey);
 
-  async function load() {
-    if (!designerId) return;
-    setLoading(true);
-    try {
-      const result = await getGroupProjectWithMembers(designerId, id);
-      if (result) {
-        setGroup(result.group);
-        setMembers(result.members);
-      }
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : "Failed to load group", "error");
-    } finally {
-      setLoading(false);
-    }
+  if (requestKey !== activeKey) {
+    setActiveKey(requestKey);
+    setGroup(null);
+    setMembers([]);
+    setLoading(Boolean(designerId));
+  }
+
+  if (!designerId && loading) {
+    setLoading(false);
   }
 
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [designerId, id]);
+    if (!designerId) return;
+    let cancelled = false;
+    void getGroupProjectWithMembers(designerId, id)
+      .then((result) => {
+        if (cancelled) return;
+        if (result) {
+          setGroup(result.group);
+          setMembers(result.members);
+        }
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        showToast(error instanceof Error ? error.message : "Failed to load group", "error");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [designerId, id, showToast]);
 
   async function handleAddMember(event: React.FormEvent) {
     event.preventDefault();

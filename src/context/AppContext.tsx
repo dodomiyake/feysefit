@@ -420,19 +420,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const stored = loadFromStorage(STORAGE_KEY_REQUESTS, demoUnlinkRequests);
     const storedRole = loadFromStorage<UserRole | null>(STORAGE_KEY_ROLE, null);
-    setCustomerLink(
-      normalizeCustomerLinkState(loadFromStorage(STORAGE_KEY_LINK, initialCustomerLinkState))
-    );
-    setUnlinkRequests(normalizeUnlinkRequests(stored));
-    setMarketplaceApprovals(
-      loadFromStorage(MARKETPLACE_APPROVALS_STORAGE_KEY, seedMarketplaceApprovals)
-    );
-    setLiveMarketplaceDesignerIds(
-      loadFromStorage(MARKETPLACE_LIVE_IDS_STORAGE_KEY, DEFAULT_LIVE_DESIGNER_IDS)
-    );
-    void syncProjects();
-    if (storedRole) setRoleState(storedRole);
-    setHydrated(true);
+    // One-time hydrate from localStorage (external store) for local/demo mode.
+    queueMicrotask(() => {
+      setCustomerLink(
+        normalizeCustomerLinkState(loadFromStorage(STORAGE_KEY_LINK, initialCustomerLinkState))
+      );
+      setUnlinkRequests(normalizeUnlinkRequests(stored));
+      setMarketplaceApprovals(
+        loadFromStorage(MARKETPLACE_APPROVALS_STORAGE_KEY, seedMarketplaceApprovals)
+      );
+      setLiveMarketplaceDesignerIds(
+        loadFromStorage(MARKETPLACE_LIVE_IDS_STORAGE_KEY, DEFAULT_LIVE_DESIGNER_IDS)
+      );
+      void syncProjects();
+      if (storedRole) setRoleState(storedRole);
+      setHydrated(true);
+    });
   }, [useApi, useSupabase, syncProjects, refreshAppData]);
 
   useEffect(() => {
@@ -617,7 +620,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
     setCustomerLink(direct);
-  }, [useApi, useSupabase, authUser?.customerId]);
+  }, [useApi, useSupabase, authUser]);
 
   const initDemoCustomer = useCallback(
     (linked = true) => {
@@ -670,7 +673,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       setCustomerLink((prev) => ({ ...prev, hasConcludedProject: value }));
     },
-    [useApi, useSupabase, authUser?.customerId]
+    [useApi, useSupabase, authUser]
   );
 
   const submitUnlinkRequest = useCallback(

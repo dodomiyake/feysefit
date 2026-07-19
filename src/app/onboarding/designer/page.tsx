@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
 import { DesignerOnboardingEditorial } from "@/components/onboarding/designer/DesignerOnboardingEditorial";
@@ -92,6 +92,9 @@ export default function DesignerOnboardingPage() {
   const [category, setCategory] = useState("");
   const [tagline, setTagline] = useState("");
   const [designerName, setDesignerName] = useState(authUser?.name ?? "");
+  if (authUser?.name && !designerName) {
+    setDesignerName(authUser.name);
+  }
   const [location, setLocation] = useState("");
   const [yearsExperience, setYearsExperience] = useState("");
   const [bio, setBio] = useState("");
@@ -99,12 +102,6 @@ export default function DesignerOnboardingPage() {
   const [coverImage, setCoverImage] = useState<PendingImage | null>(null);
   const [avatarImage, setAvatarImage] = useState<PendingImage | null>(null);
   const [portfolioImages, setPortfolioImages] = useState<PendingImage[]>([]);
-
-  useEffect(() => {
-    if (authUser?.name && !designerName) {
-      setDesignerName(authUser.name);
-    }
-  }, [authUser?.name, designerName]);
 
   const setCoverImageSafe = (file: File) => {
     setCoverImage((prev) => {

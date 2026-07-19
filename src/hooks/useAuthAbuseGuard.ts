@@ -58,27 +58,29 @@ function loadTurnstileScript(): Promise<void> {
 }
 
 export function useAuthAbuseGuard(action: AuthAbuseAction, subject: string) {
+  const identityKey = `${action}:${subject}`;
   const [snapshot, setSnapshot] = useState(() => getAuthAbuseSnapshot(action, subject));
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [trackedKey, setTrackedKey] = useState(identityKey);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | null>(null);
   const siteKey = getTurnstileSiteKey();
+
+  if (trackedKey !== identityKey) {
+    setTrackedKey(identityKey);
+    setCaptchaToken(null);
+    setSnapshot(getAuthAbuseSnapshot(action, subject));
+  }
 
   const refresh = useCallback(() => {
     setSnapshot(getAuthAbuseSnapshot(action, subject));
   }, [action, subject]);
 
   useEffect(() => {
-    refresh();
     if (!snapshot.limited) return;
     const id = window.setInterval(refresh, 1000);
     return () => window.clearInterval(id);
   }, [refresh, snapshot.limited, snapshot.cooldownUntil]);
-
-  useEffect(() => {
-    setCaptchaToken(null);
-    refresh();
-  }, [subject, action, refresh]);
 
   useEffect(() => {
     if (!snapshot.requiresCaptcha || !siteKey || !hostRef.current) {

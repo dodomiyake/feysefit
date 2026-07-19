@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useApp } from "@/context/AppContext";
 import { AdminExportButton } from "@/components/admin/AdminExportButton";
 import { AdminFilterExportSlot, AdminFilterToolbar } from "@/components/admin/AdminFilterToolbar";
@@ -45,11 +45,17 @@ export function AdminAppointmentsTable({
   const [statusFilter, setStatusFilter] = useState("all");
   const [dayFilter, setDayFilter] = useState("");
   const [dayReady, setDayReady] = useState(false);
+  const defaultDayKey = useMemo(
+    () => getDefaultAppointmentDayKey(appointments),
+    [appointments]
+  );
+  const [prevDefaultDayKey, setPrevDefaultDayKey] = useState(defaultDayKey);
 
-  useEffect(() => {
-    setDayFilter(getDefaultAppointmentDayKey(appointments));
-    setDayReady(true);
-  }, [appointments]);
+  if (defaultDayKey !== prevDefaultDayKey || !dayReady) {
+    setPrevDefaultDayKey(defaultDayKey);
+    setDayFilter(defaultDayKey);
+    if (!dayReady) setDayReady(true);
+  }
 
   const designerOptions = useMemo(
     () => [

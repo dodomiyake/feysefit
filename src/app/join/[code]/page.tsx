@@ -17,22 +17,18 @@ export default function JoinInvitePage({ params }: { params: Promise<{ code: str
   const router = useRouter();
   const useSupabase = isSupabaseEnabled();
   const [loading, setLoading] = useState(useSupabase);
-  const [inviteName, setInviteName] = useState<string | null>(null);
-  const [designerName, setDesignerName] = useState<string | null>(null);
-  const [projectType, setProjectType] = useState<string | null>(null);
+  const [inviteName, setInviteName] = useState<string | null>(useSupabase ? null : "Guest");
+  const [designerName, setDesignerName] = useState<string | null>(
+    useSupabase ? null : "Your designer"
+  );
+  const [projectType, setProjectType] = useState<string | null>(useSupabase ? null : "Bespoke");
   const [invalid, setInvalid] = useState(false);
   const [used, setUsed] = useState(false);
 
   const normalizedCode = normalizeInviteCode(decodeURIComponent(code));
 
   useEffect(() => {
-    if (!useSupabase) {
-      setInviteName("Guest");
-      setDesignerName("Your designer");
-      setProjectType("Bespoke");
-      setLoading(false);
-      return;
-    }
+    if (!useSupabase) return;
 
     void getInviteByCode(normalizedCode)
       .then((details) => {

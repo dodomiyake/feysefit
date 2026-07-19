@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useApp } from "@/context/AppContext";
 import {
@@ -45,6 +45,21 @@ export function CreateAppointmentForm({
   const [submitting, setSubmitting] = useState(false);
   const [internalOpen, setInternalOpen] = useState(Boolean(initialStudioClientId || initialCustomerId));
   const open = controlledOpen ?? internalOpen;
+  const paramsKey = `${initialStudioClientId}:${initialCustomerId}`;
+  const [prevParamsKey, setPrevParamsKey] = useState(paramsKey);
+
+  if (paramsKey !== prevParamsKey) {
+    setPrevParamsKey(paramsKey);
+    if (initialStudioClientId) {
+      setClientKind("studio");
+      setStudioClientId(initialStudioClientId);
+      if (controlledOpen === undefined) setInternalOpen(true);
+    } else if (initialCustomerId) {
+      setClientKind("app");
+      setCustomerId(initialCustomerId);
+      if (controlledOpen === undefined) setInternalOpen(true);
+    }
+  }
 
   const setOpen = (next: boolean) => {
     if (controlledOpen === undefined) {
@@ -52,18 +67,6 @@ export function CreateAppointmentForm({
     }
     onOpenChange?.(next);
   };
-
-  useEffect(() => {
-    if (initialStudioClientId) {
-      setClientKind("studio");
-      setStudioClientId(initialStudioClientId);
-      setOpen(true);
-    } else if (initialCustomerId) {
-      setClientKind("app");
-      setCustomerId(initialCustomerId);
-      setOpen(true);
-    }
-  }, [initialStudioClientId, initialCustomerId]);
 
   const clientOptions = useMemo(() => {
     if (clientKind === "studio") {

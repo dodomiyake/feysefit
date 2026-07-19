@@ -16,10 +16,19 @@ export function SessionIdleGuard() {
   const { authUser, logout, showToast } = useApp();
   const router = useRouter();
   const pathname = usePathname();
-  const lastActivityRef = useRef(Date.now());
+  const lastActivityRef = useRef(0);
   const warningOpenRef = useRef(false);
   const lockingRef = useRef(false);
   const [warningOpen, setWarningOpen] = useState(false);
+  const guardActive = Boolean(authUser && !isPublicPath(pathname));
+  const [prevGuardActive, setPrevGuardActive] = useState(guardActive);
+
+  if (prevGuardActive !== guardActive) {
+    setPrevGuardActive(guardActive);
+    if (warningOpen) {
+      setWarningOpen(false);
+    }
+  }
 
   const continueSession = useCallback(() => {
     lastActivityRef.current = Date.now();
@@ -45,11 +54,10 @@ export function SessionIdleGuard() {
   );
 
   useEffect(() => {
-    if (!authUser || isPublicPath(pathname)) return;
+    if (!guardActive) return;
 
     lastActivityRef.current = Date.now();
     warningOpenRef.current = false;
-    setWarningOpen(false);
     touchAppSessionActivity();
 
     const touch = () => {
@@ -92,9 +100,9 @@ export function SessionIdleGuard() {
       document.removeEventListener("visibilitychange", onVisibility);
       window.clearInterval(intervalId);
     };
-  }, [authUser, lockSession, pathname]);
+  }, [guardActive, lockSession]);
 
-  if (!authUser || isPublicPath(pathname)) return null;
+  if (!guardActive) return null;
 
   return (
     <Modal open={warningOpen} onClose={continueSession} title="Your session is about to lock">

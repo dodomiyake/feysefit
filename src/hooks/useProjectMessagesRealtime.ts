@@ -14,7 +14,9 @@ export function useProjectMessagesRealtime(
   const instanceId = useId();
   const onMessageRef = useRef(onMessage);
 
-  onMessageRef.current = onMessage;
+  useEffect(() => {
+    onMessageRef.current = onMessage;
+  }, [onMessage]);
 
   useEffect(() => {
     if (!enabled) return;

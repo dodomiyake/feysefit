@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { StudioClient } from "@/lib/studio-client";
 import type { PreferredFit } from "@/lib/measurement-sections";
 import {
@@ -61,14 +61,26 @@ export function StudioClientMeasurementsEditor({
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(() => !hasStudioMeasurementData(client));
   const [display, setDisplay] = useState(saved);
+  const [syncKey, setSyncKey] = useState(client.id);
 
-  useEffect(() => {
+  if (client.id !== syncKey) {
+    setSyncKey(client.id);
     setUnit(saved.unit);
     setPreferredFit(saved.preferredFit);
     setValues(saved.values);
     setDisplay(saved);
     setEditing(!hasStudioMeasurementData(client));
-  }, [client.id, saved, client]);
+  } else if (
+    saved.unit !== display.unit ||
+    saved.preferredFit !== display.preferredFit ||
+    saved.measurementUpdatedAt !== display.measurementUpdatedAt
+  ) {
+    // External client data refresh for the same client — resync draft/display.
+    setUnit(saved.unit);
+    setPreferredFit(saved.preferredFit);
+    setValues(saved.values);
+    setDisplay(saved);
+  }
 
   const unitLabel = unit === "cm" ? "cm" : "in";
   const displayUnitLabel = display.unit === "cm" ? "cm" : "in";
@@ -259,8 +271,10 @@ export function StudioClientProfileFields({
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
   const [display, setDisplay] = useState(saved);
+  const [syncKey, setSyncKey] = useState(client.id);
 
-  useEffect(() => {
+  if (client.id !== syncKey) {
+    setSyncKey(client.id);
     setName(saved.name);
     setPhone(saved.phone);
     setEmail(saved.email);
@@ -268,7 +282,20 @@ export function StudioClientProfileFields({
     setNotes(saved.notes);
     setDisplay(saved);
     setEditing(false);
-  }, [client.id, saved]);
+  } else if (
+    saved.name !== display.name ||
+    saved.phone !== display.phone ||
+    saved.email !== display.email ||
+    saved.location !== display.location ||
+    saved.notes !== display.notes
+  ) {
+    setName(saved.name);
+    setPhone(saved.phone);
+    setEmail(saved.email);
+    setLocation(saved.location);
+    setNotes(saved.notes);
+    setDisplay(saved);
+  }
 
   function resetDraft() {
     setName(display.name);
