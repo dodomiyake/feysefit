@@ -112,6 +112,8 @@ function pruneWindow(action: AuthAbuseAction, bucket: StoredBucket, now: number)
   return bucket;
 }
 
+// When a Turnstile site key is present, CAPTCHA is always required for auth attempts.
+// CaptchaAfterFailures remains for documentation / future soft mode.
 export function getAuthAbuseSnapshot(
   action: AuthAbuseAction,
   subject = ""
@@ -121,8 +123,7 @@ export function getAuthAbuseSnapshot(
   const bucket = pruneWindow(action, readBucket(action, subject), now);
   const retryAfterMs = Math.max(0, bucket.cooldownUntil - now);
   const limited = retryAfterMs > 0;
-  const requiresCaptcha =
-    Boolean(getTurnstileSiteKey()) && bucket.failures >= cfg.captchaAfterFailures;
+  const requiresCaptcha = Boolean(getTurnstileSiteKey());
 
   let message: string | null = null;
   if (limited) {
@@ -153,7 +154,7 @@ export function assertAuthAttemptAllowed(
   const snap = getAuthAbuseSnapshot(action, subject);
   if (snap.limited) return snap.message;
   if (snap.requiresCaptcha && !captchaToken?.trim()) {
-    return "Complete the security check to continue.";
+    return "Complete the security check to prove you are human, then try again.";
   }
   return null;
 }

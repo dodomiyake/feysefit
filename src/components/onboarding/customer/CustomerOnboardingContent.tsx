@@ -134,7 +134,7 @@ export function CustomerOnboardingContent({ mode = "invite" }: CustomerOnboardin
         <TopBar
           title={mode === "direct" ? "Find a Designer" : "Client Setup"}
           showBack
-          backHref="/signup?role=customer"
+          backHref="/signup/client"
         />
       </div>
 

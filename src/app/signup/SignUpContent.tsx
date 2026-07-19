@@ -18,22 +18,7 @@ import { useAuthAbuseGuard } from "@/hooks/useAuthAbuseGuard";
 import { logSecurityEvent } from "@/lib/security-events";
 import { CaptchaSlot } from "@/components/auth/CaptchaSlot";
 import { cn } from "@/lib/cn";
-import { Eye, EyeOff, Paintbrush, ShoppingBag } from "lucide-react";
-
-const ROLE_OPTIONS = [
-  {
-    value: "designer" as const,
-    label: "Designer",
-    sublabel: "I create",
-    icon: Paintbrush,
-  },
-  {
-    value: "customer" as const,
-    label: "Client",
-    sublabel: "I discover",
-    icon: ShoppingBag,
-  },
-];
+import { Eye, EyeOff } from "lucide-react";
 
 const CUSTOMER_PATH_OPTIONS = [
   {
@@ -48,17 +33,21 @@ const CUSTOMER_PATH_OPTIONS = [
   },
 ];
 
-export default function SignUpPage() {
+export type SignUpRole = "designer" | "customer";
+
+interface SignUpContentProps {
+  role: SignUpRole;
+}
+
+export default function SignUpContent({ role }: SignUpContentProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { setRole, showToast, login } = useApp();
   const inviteParam = searchParams.get("invite") ?? searchParams.get("code");
   const inviteKey = inviteParam ?? "";
-  const [role, setLocalRole] = useState<"designer" | "customer">(
-    inviteParam
-      ? "customer"
-      : (searchParams.get("role") as "designer" | "customer") || "designer"
-  );
+  const accountBackHref = role === "designer" ? "/account/designer" : "/account/client";
+  const loginHref = role === "designer" ? "/login?role=designer" : "/login?role=customer";
+
   const [customerPath, setCustomerPath] = useState<"invite" | "direct">(
     inviteParam ? "invite" : "direct"
   );
@@ -79,12 +68,17 @@ export default function SignUpPage() {
 
   if (inviteKey !== prevInviteKey) {
     setPrevInviteKey(inviteKey);
-    if (inviteParam) {
-      setLocalRole("customer");
+    if (inviteParam && role === "customer") {
       setCustomerPath("invite");
       setInviteCode(normalizeInviteCode(inviteParam));
     }
   }
+
+  const title = role === "designer" ? "Create designer account" : "Create client account";
+  const subtitle =
+    role === "designer"
+      ? "Set up your atelier profile and start inviting clients."
+      : "Begin your journey into the world of luxury tech.";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,7 +99,7 @@ export default function SignUpPage() {
       logSecurityEvent({
         eventType: abuse.snapshot.limited ? "auth_rate_limited" : "captcha_required",
         email,
-        meta: { flow: "signup" },
+        meta: { flow: "signup", role },
       });
       return;
     }
@@ -153,7 +147,7 @@ export default function SignUpPage() {
       logSecurityEvent({
         eventType: next.limited ? "auth_rate_limited" : "signup_failed",
         email,
-        meta: { failures: next.failures },
+        meta: { failures: next.failures, role },
       });
       const message = error instanceof Error ? error.message : "Signup failed";
       setFormError(message);
@@ -166,63 +160,30 @@ export default function SignUpPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="lg:hidden">
-        <TopBar title="Create Account" showBack backHref="/" />
+        <TopBar title={title} showBack backHref={accountBackHref} />
       </div>
 
       <main className="flex min-h-screen flex-col lg:flex-row">
         <SignUpEditorialPanel />
 
-        <div className="flex min-h-0 w-full flex-1 lg:min-h-screen lg:w-1/2 lg:overflow-y-auto">
-          <div className="signup-fade-in mx-auto flex w-full max-w-[560px] flex-col px-5 py-8 pb-12 lg:px-12 lg:py-12 lg:pb-16">
-            <BackButton href="/" label="Back to home" className="mb-5 hidden text-sm lg:inline-flex" />
+        <div className="flex w-full flex-1 flex-col items-center justify-center px-5 py-8 pb-12 lg:min-h-screen lg:overflow-y-auto lg:px-12 lg:py-12 lg:pb-16">
+          <div className="signup-fade-in w-full max-w-[480px]">
+            <BackButton
+              href={accountBackHref}
+              label={role === "designer" ? "Back to designer account" : "Back to client account"}
+              className="mb-5 hidden text-sm lg:inline-flex"
+            />
 
-            <div className="mb-5 lg:hidden">
+            <div className="mb-5 flex justify-center lg:hidden">
               <BrandLogo className="text-3xl font-extrabold tracking-tight" />
             </div>
 
-            <header className="mb-6 text-center lg:text-left">
-              <h1 className="text-xl font-semibold text-primary">
-                Create Account
-              </h1>
-              <p className="mt-1 text-xs leading-relaxed text-ink-muted">
-                Begin your journey into the world of luxury tech.
-              </p>
+            <header className="mb-6 text-center">
+              <h1 className="text-xl font-semibold text-primary">{title}</h1>
+              <p className="mt-1 text-xs leading-relaxed text-ink-muted">{subtitle}</p>
             </header>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div className="space-y-3">
-                <span className="text-xs font-medium uppercase tracking-widest text-ink-muted">
-                  Select your role
-                </span>
-                <div className="grid grid-cols-2 gap-3">
-                  {ROLE_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setLocalRole(opt.value)}
-                      className={cn(
-                        "flex flex-col items-center justify-center rounded-xl border-2 p-4 transition-all duration-300",
-                        role === opt.value
-                          ? "border-accent bg-accent/10"
-                          : "border-[#d3c3ba] bg-surface hover:bg-surface-container"
-                      )}
-                    >
-                      <opt.icon
-                        className={cn(
-                          "mb-1.5 h-6 w-6",
-                          role === opt.value ? "text-accent" : "text-accent/70"
-                        )}
-                        strokeWidth={1.5}
-                      />
-                      <span className="text-base font-semibold text-primary">{opt.label}</span>
-                      <span className="mt-0.5 text-[11px] font-semibold text-ink-muted">
-                        {opt.sublabel}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
+            <form onSubmit={(e) => void handleSubmit(e)} className="space-y-5">
               {role === "customer" && (
                 <div className="space-y-2.5">
                   <span className="text-sm font-medium text-primary">How are you joining?</span>
@@ -279,7 +240,10 @@ export default function SignUpPage() {
                   onChange={(e) => setEmail(e.target.value)}
                 />
                 <div className="space-y-1.5">
-                  <label htmlFor="password" className="block text-sm font-medium tracking-wide text-primary">
+                  <label
+                    htmlFor="password"
+                    className="block text-sm font-medium tracking-wide text-primary"
+                  >
                     Password
                   </label>
                   <div className="relative">
@@ -329,11 +293,17 @@ export default function SignUpPage() {
                 />
                 <label htmlFor="terms" className="text-sm leading-snug text-ink-muted">
                   I agree to the{" "}
-                  <Link href="/terms" className="text-accent underline underline-offset-4 hover:opacity-70">
+                  <Link
+                    href="/terms"
+                    className="text-accent underline underline-offset-4 hover:opacity-70"
+                  >
                     Terms of Service
                   </Link>{" "}
                   and{" "}
-                  <Link href="/privacy" className="text-accent underline underline-offset-4 hover:opacity-70">
+                  <Link
+                    href="/privacy"
+                    className="text-accent underline underline-offset-4 hover:opacity-70"
+                  >
                     Privacy Policy
                   </Link>
                   .
@@ -352,12 +322,18 @@ export default function SignUpPage() {
                 </p>
               ) : null}
 
-              <CaptchaSlot hostRef={abuse.captchaHostRef} show={abuse.showCaptcha} />
+              <CaptchaSlot
+                hostRef={abuse.captchaHostRef}
+                show={abuse.showCaptcha}
+                status={abuse.captchaStatus}
+              />
 
               <div className="space-y-3 pt-1">
                 <Button
                   type="submit"
-                  disabled={submitting || abuse.snapshot.limited}
+                  disabled={
+                    submitting || abuse.snapshot.limited || (abuse.showCaptcha && !abuse.captchaSolved)
+                  }
                   className="h-12 w-full text-base shadow-lg hover:shadow-xl"
                   size="lg"
                 >
@@ -366,7 +342,7 @@ export default function SignUpPage() {
                 <p className="text-center text-sm text-ink-muted">
                   Already a member?{" "}
                   <Link
-                    href="/login"
+                    href={loginHref}
                     className="font-semibold text-primary underline-offset-4 hover:underline"
                   >
                     Sign In

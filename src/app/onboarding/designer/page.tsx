@@ -202,7 +202,7 @@ export default function DesignerOnboardingPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="lg:hidden">
-        <TopBar title="Designer Setup" showBack backHref="/signup?role=designer" />
+        <TopBar title="Designer Setup" showBack backHref="/signup/designer" />
       </div>
 
       <DesignerOnboardingSidebar step={step} onStepSelect={setStep} />

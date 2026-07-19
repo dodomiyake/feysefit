@@ -37,7 +37,10 @@ function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { setRole, login, showToast, initDemoCustomer, initDirectCustomer, syncProjects } = useApp();
-  const [loginRole, setLoginRole] = useState<"designer" | "customer">("designer");
+  const roleParam = searchParams.get("role");
+  const [loginRole, setLoginRole] = useState<"designer" | "customer">(
+    roleParam === "customer" ? "customer" : "designer"
+  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -48,6 +51,12 @@ function LoginPageContent() {
   const allowDemoAuth = isDemoAuthAllowed();
   const nextPath = resolveSafeNextPath(searchParams.get("next"));
   const abuse = useAuthAbuseGuard("login", email);
+
+  useEffect(() => {
+    if (roleParam === "customer" || roleParam === "designer") {
+      setLoginRole(roleParam);
+    }
+  }, [roleParam]);
 
   useEffect(() => {
     const error = searchParams.get("error");
@@ -273,6 +282,8 @@ function LoginPageContent() {
         onRememberMeChange={setRememberMe}
         onSubmit={handleLogin}
         disabled={abuse.snapshot.limited}
+        requireCaptcha={abuse.showCaptcha}
+        captchaSolved={abuse.captchaSolved}
         notice={
           abuse.snapshot.message ? (
             <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
@@ -281,13 +292,20 @@ function LoginPageContent() {
           ) : null
         }
         beforeSubmit={
-          <CaptchaSlot hostRef={abuse.captchaHostRef} show={abuse.showCaptcha} />
+          <CaptchaSlot
+            hostRef={abuse.captchaHostRef}
+            show={abuse.showCaptcha}
+            status={abuse.captchaStatus}
+          />
         }
       />
 
       <p className="mt-6 text-center text-sm text-zinc-500">
         New to the house?{" "}
-        <Link href="/signup" className="font-semibold text-highlight underline-offset-4 hover:underline">
+        <Link
+          href={loginRole === "customer" ? "/signup/client" : "/signup/designer"}
+          className="font-semibold text-highlight underline-offset-4 hover:underline"
+        >
           Create account
         </Link>
       </p>

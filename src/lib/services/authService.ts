@@ -40,7 +40,9 @@ export async function signIn(
       throw new Error(GENERIC_LOGIN_ERROR);
     }
     if (msg.includes("captcha") || msg.includes("timeout-or-duplicate")) {
-      throw new Error("Security check failed. Please complete the CAPTCHA and try again.");
+      throw new Error(
+        "Security check failed or expired. Complete the human verification again, then try signing in."
+      );
     }
     throw new Error(toGenericLoginError(error.message) || GENERIC_LOGIN_ERROR);
   }
@@ -116,7 +118,9 @@ export async function signUp(input: {
   if (error) {
     const msg = error.message.toLowerCase();
     if (msg.includes("captcha") || msg.includes("timeout-or-duplicate")) {
-      throw new Error("Security check failed. Please complete the CAPTCHA and try again.");
+      throw new Error(
+        "Security check failed or expired. Complete the human verification again, then try signing in."
+      );
     }
     if (msg.includes("already") || msg.includes("registered") || msg.includes("exists")) {
       throw new Error("Unable to create an account with those details. Try signing in instead.");

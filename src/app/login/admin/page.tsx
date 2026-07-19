@@ -178,7 +178,15 @@ export default function AdminLoginPage() {
             </p>
           ) : null
         }
-        beforeSubmit={<CaptchaSlot hostRef={abuse.captchaHostRef} show={abuse.showCaptcha} />}
+        beforeSubmit={
+          <CaptchaSlot
+            hostRef={abuse.captchaHostRef}
+            show={abuse.showCaptcha}
+            status={abuse.captchaStatus}
+          />
+        }
+        requireCaptcha={abuse.showCaptcha}
+        captchaSolved={abuse.captchaSolved}
       />
     </LoginPageShell>
   );

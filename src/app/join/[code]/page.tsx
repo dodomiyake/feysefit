@@ -48,7 +48,7 @@ export default function JoinInvitePage({ params }: { params: Promise<{ code: str
       .finally(() => setLoading(false));
   }, [normalizedCode, useSupabase]);
 
-  const signupHref = `/signup?role=customer&invite=${encodeURIComponent(normalizedCode)}`;
+  const signupHref = `/signup/client?invite=${encodeURIComponent(normalizedCode)}`;
 
   return (
     <div className="min-h-screen bg-background">
@@ -79,7 +79,7 @@ export default function JoinInvitePage({ params }: { params: Promise<{ code: str
                 This link may be incorrect, expired, or already used. Ask your designer to send a new
                 invitation.
               </p>
-              <Link href="/signup" className="inline-block text-sm font-medium text-accent hover:underline">
+              <Link href="/account/client" className="inline-block text-sm font-medium text-accent hover:underline">
                 Create an account without an invite
               </Link>
             </div>

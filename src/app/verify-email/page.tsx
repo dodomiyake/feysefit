@@ -121,10 +121,19 @@ function VerifyEmailContent() {
             className="h-11 w-full rounded-lg border border-zinc-700 bg-zinc-900 py-2.5 pl-12 pr-4 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none focus:border-accent focus:ring-1 focus:ring-accent"
           />
         </div>
-        <CaptchaSlot hostRef={abuse.captchaHostRef} show={abuse.showCaptcha} />
+        <CaptchaSlot
+          hostRef={abuse.captchaHostRef}
+          show={abuse.showCaptcha}
+          status={abuse.captchaStatus}
+        />
         <Button
           type="button"
-          disabled={submitting || !useSupabase || abuse.snapshot.limited}
+          disabled={
+            submitting ||
+            !useSupabase ||
+            abuse.snapshot.limited ||
+            (abuse.showCaptcha && !abuse.captchaSolved)
+          }
           className="w-full"
           onClick={() => void handleResend()}
         >

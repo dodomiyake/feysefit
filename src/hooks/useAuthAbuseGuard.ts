@@ -22,6 +22,8 @@ declare global {
           "expired-callback"?: () => void;
           "error-callback"?: () => void;
           theme?: "light" | "dark" | "auto";
+          appearance?: "always" | "execute" | "interaction-only";
+          size?: "normal" | "compact" | "flexible";
         }
       ) => string;
       reset: (widgetId?: string) => void;
@@ -29,6 +31,8 @@ declare global {
     };
   }
 }
+
+export type CaptchaStatus = "idle" | "loading" | "ready" | "solved" | "error";
 
 let turnstileScriptPromise: Promise<void> | null = null;
 
@@ -42,13 +46,22 @@ function loadTurnstileScript(): Promise<void> {
       'script[src*="challenges.cloudflare.com/turnstile"]'
     );
     if (existing) {
-      existing.addEventListener("load", () => resolve());
-      existing.addEventListener("error", () => reject(new Error("Turnstile failed to load")));
+      if (window.turnstile) {
+        resolve();
+        return;
+      }
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener(
+        "error",
+        () => reject(new Error("Turnstile failed to load")),
+        { once: true }
+      );
       return;
     }
     const script = document.createElement("script");
     script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
     script.async = true;
+    script.defer = true;
     script.onload = () => resolve();
     script.onerror = () => reject(new Error("Turnstile failed to load"));
     document.head.appendChild(script);
@@ -57,19 +70,31 @@ function loadTurnstileScript(): Promise<void> {
   return turnstileScriptPromise;
 }
 
+/**
+ * Abuse guard + always-on Turnstile when NEXT_PUBLIC_TURNSTILE_SITE_KEY is set.
+ * Widget mounts once (not on every email keystroke) so the human check stays stable.
+ */
 export function useAuthAbuseGuard(action: AuthAbuseAction, subject: string) {
   const identityKey = `${action}:${subject}`;
   const [snapshot, setSnapshot] = useState(() => getAuthAbuseSnapshot(action, subject));
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaStatus, setCaptchaStatus] = useState<CaptchaStatus>("idle");
   const [trackedKey, setTrackedKey] = useState(identityKey);
+  const [hostEl, setHostEl] = useState<HTMLDivElement | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | null>(null);
   const siteKey = getTurnstileSiteKey();
+  const showCaptcha = isTurnstileConfigured();
+
+  const captchaHostRef = useCallback((node: HTMLDivElement | null) => {
+    hostRef.current = node;
+    setHostEl(node);
+  }, []);
 
   if (trackedKey !== identityKey) {
     setTrackedKey(identityKey);
-    setCaptchaToken(null);
     setSnapshot(getAuthAbuseSnapshot(action, subject));
+    // Keep solved captcha across email edits — remounting on every keystroke broke deploy UX.
   }
 
   const refresh = useCallback(() => {
@@ -83,7 +108,68 @@ export function useAuthAbuseGuard(action: AuthAbuseAction, subject: string) {
   }, [refresh, snapshot.limited, snapshot.cooldownUntil]);
 
   useEffect(() => {
-    if (!snapshot.requiresCaptcha || !siteKey || !hostRef.current) {
+    if (!showCaptcha || !siteKey) {
+      setCaptchaStatus("idle");
+      setCaptchaToken(null);
+      return;
+    }
+    if (!hostEl) {
+      setCaptchaStatus("loading");
+      return;
+    }
+
+    let cancelled = false;
+    setCaptchaStatus("loading");
+
+    const mount = async () => {
+      try {
+        await loadTurnstileScript();
+        if (cancelled || !window.turnstile || !hostRef.current) {
+          if (!cancelled) setCaptchaStatus("error");
+          return;
+        }
+
+        if (widgetIdRef.current) {
+          try {
+            window.turnstile.remove(widgetIdRef.current);
+          } catch {
+            // ignore
+          }
+          widgetIdRef.current = null;
+        }
+
+        hostRef.current.innerHTML = "";
+        widgetIdRef.current = window.turnstile.render(hostRef.current, {
+          sitekey: siteKey,
+          theme: "auto",
+          appearance: "always",
+          size: "flexible",
+          callback: (token) => {
+            setCaptchaToken(token);
+            setCaptchaStatus("solved");
+          },
+          "expired-callback": () => {
+            setCaptchaToken(null);
+            setCaptchaStatus("ready");
+          },
+          "error-callback": () => {
+            setCaptchaToken(null);
+            setCaptchaStatus("error");
+          },
+        });
+        if (!cancelled) setCaptchaStatus("ready");
+      } catch {
+        if (!cancelled) {
+          setCaptchaStatus("error");
+          setCaptchaToken(null);
+        }
+      }
+    };
+
+    void mount();
+
+    return () => {
+      cancelled = true;
       if (widgetIdRef.current && window.turnstile) {
         try {
           window.turnstile.remove(widgetIdRef.current);
@@ -92,38 +178,12 @@ export function useAuthAbuseGuard(action: AuthAbuseAction, subject: string) {
         }
         widgetIdRef.current = null;
       }
-      return;
-    }
-
-    let cancelled = false;
-    void (async () => {
-      try {
-        await loadTurnstileScript();
-        if (cancelled || !hostRef.current || !window.turnstile) return;
-        if (widgetIdRef.current) {
-          window.turnstile.remove(widgetIdRef.current);
-          widgetIdRef.current = null;
-        }
-        hostRef.current.innerHTML = "";
-        widgetIdRef.current = window.turnstile.render(hostRef.current, {
-          sitekey: siteKey,
-          theme: "auto",
-          callback: (token) => setCaptchaToken(token),
-          "expired-callback": () => setCaptchaToken(null),
-          "error-callback": () => setCaptchaToken(null),
-        });
-      } catch {
-        // Widget unavailable — assertAuthAttemptAllowed may still block if captcha required.
-      }
-    })();
-
-    return () => {
-      cancelled = true;
     };
-  }, [snapshot.requiresCaptcha, siteKey, subject]);
+  }, [showCaptcha, siteKey, hostEl]);
 
   const resetCaptcha = useCallback(() => {
     setCaptchaToken(null);
+    setCaptchaStatus((current) => (current === "idle" ? current : "ready"));
     if (widgetIdRef.current && window.turnstile) {
       try {
         window.turnstile.reset(widgetIdRef.current);
@@ -153,12 +213,15 @@ export function useAuthAbuseGuard(action: AuthAbuseAction, subject: string) {
   return {
     snapshot,
     captchaToken,
-    captchaHostRef: hostRef,
-    showCaptcha: snapshot.requiresCaptcha && isTurnstileConfigured(),
+    captchaStatus,
+    captchaHostRef,
+    showCaptcha,
+    captchaSolved: Boolean(captchaToken?.trim()),
     turnstileConfigured: isTurnstileConfigured(),
     precheck,
     onFailure,
     onSuccess,
+    resetCaptcha,
     refresh,
   };
 }

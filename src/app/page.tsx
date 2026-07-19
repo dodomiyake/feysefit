@@ -55,14 +55,14 @@ export default function LandingPage() {
 
           <div className="landing-reveal landing-reveal-delay-2 flex flex-col gap-4">
             <Link
-              href="/signup?role=designer"
+              href="/account/designer"
               className="group flex items-center justify-between rounded-full bg-primary px-8 py-5 text-lg font-semibold text-white transition-all hover:bg-primary/90 active:scale-[0.98]"
             >
               <span>I&apos;m a Designer</span>
               <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
             </Link>
             <Link
-              href="/signup?role=customer"
+              href="/account/client"
               className="group flex items-center justify-between rounded-full border border-ink-muted/30 px-8 py-5 text-lg font-semibold text-primary transition-all hover:bg-surface-container active:scale-[0.98]"
             >
               <span>I&apos;m a Client</span>

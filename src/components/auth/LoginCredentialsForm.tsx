@@ -20,6 +20,9 @@ interface LoginCredentialsFormProps {
   disabled?: boolean;
   notice?: React.ReactNode;
   beforeSubmit?: React.ReactNode;
+  /** When true, Sign in stays disabled until CAPTCHA is solved. */
+  requireCaptcha?: boolean;
+  captchaSolved?: boolean;
 }
 
 export function LoginCredentialsForm({
@@ -38,7 +41,10 @@ export function LoginCredentialsForm({
   disabled = false,
   notice,
   beforeSubmit,
+  requireCaptcha = false,
+  captchaSolved = true,
 }: LoginCredentialsFormProps) {
+  const captchaBlocking = requireCaptcha && !captchaSolved;
   return (
     <form onSubmit={onSubmit} className="mt-6 space-y-4">
       {notice}
@@ -117,9 +123,15 @@ export function LoginCredentialsForm({
 
       {beforeSubmit}
 
+      {captchaBlocking ? (
+        <p className="px-1 text-center text-xs text-amber-200/90">
+          Complete the security check above, then sign in.
+        </p>
+      ) : null}
+
       <Button
         type="submit"
-        disabled={submitting || disabled}
+        disabled={submitting || disabled || captchaBlocking}
         className="mt-2 h-12 w-full text-sm shadow-md hover:shadow-lg"
         size="lg"
       >

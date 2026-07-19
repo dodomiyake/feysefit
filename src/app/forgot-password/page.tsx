@@ -113,10 +113,19 @@ export default function ForgotPasswordPage() {
               />
             </div>
           </div>
-          <CaptchaSlot hostRef={abuse.captchaHostRef} show={abuse.showCaptcha} />
+          <CaptchaSlot
+            hostRef={abuse.captchaHostRef}
+            show={abuse.showCaptcha}
+            status={abuse.captchaStatus}
+          />
           <Button
             type="submit"
-            disabled={submitting || !useSupabase || abuse.snapshot.limited}
+            disabled={
+              submitting ||
+              !useSupabase ||
+              abuse.snapshot.limited ||
+              (abuse.showCaptcha && !abuse.captchaSolved)
+            }
             className="mt-2 h-12 w-full"
             size="lg"
           >
