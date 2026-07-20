@@ -235,30 +235,35 @@ export async function createProject(
     studioClientUuid = studioRow?.id ?? null;
   }
 
-  // Only designers creating for a platform client need a preflight link check.
-  // Never run this for marketplace customer requests — it blocks all clients.
+  // Designer creates: verify an active link on the SAME designer UUID we insert.
+  // Do not look up "any" profile by user_id — that breaks when a user has >1 profile.
   if (!options?.skipActiveLinkCheck && customerProfileId && !studioClientUuid) {
     const userId = (await supabase.auth.getUser()).data.user?.id;
-    if (userId) {
-      const { data: designerRow } = await supabase
-        .from("designer_profiles")
-        .select("id")
-        .eq("user_id", userId)
-        .maybeSingle();
-      if (designerRow?.id) {
-        const { data: relationship } = await supabase
-          .from("designer_customer_relationships")
-          .select("id")
-          .eq("designer_id", designerRow.id)
-          .eq("customer_id", customerProfileId)
-          .eq("is_active", true)
-          .maybeSingle();
-        if (!relationship) {
-          throw new Error(
-            "You can only create projects for clients linked to you. This client may be linked to another designer."
-          );
-        }
-      }
+    if (!userId) {
+      throw new Error("Sign in again to create a project.");
+    }
+
+    const { data: ownedDesigner } = await supabase
+      .from("designer_profiles")
+      .select("id")
+      .eq("id", input.designerProfileId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!ownedDesigner) {
+      throw new Error("Designer profile not found for this account. Sign out and sign back in.");
+    }
+
+    const { data: relationship } = await supabase
+      .from("designer_customer_relationships")
+      .select("id")
+      .eq("designer_id", input.designerProfileId)
+      .eq("customer_id", customerProfileId)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (!relationship) {
+      throw new Error(
+        "You can only create projects for clients linked to you. This client may be linked to another designer."
+      );
     }
   }
 
@@ -300,7 +305,7 @@ export async function createProject(
         );
       }
       throw new Error(
-        "You can only create projects for clients linked to you. This client may be linked to another designer."
+        "Could not create this project. Confirm the client is linked to your designer profile, then try again."
       );
     }
     throw new Error(error.message);

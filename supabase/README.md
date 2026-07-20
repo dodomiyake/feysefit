@@ -62,6 +62,7 @@ Then run:
 27. **JWT lifetime (production):** In Supabase → **Project Settings → Authentication → JWT expiry**, keep access-token lifetime relatively short (about **3600 seconds / 1 hour** recommended). Session sign-out scopes revoke refresh tokens immediately, but access JWTs can remain valid until they expire — a short lifetime limits the window after “sign out all devices”.
 28. **Approve unlink clears designer link:** Run **`patch-approve-unlink-clear-link.sql`** so admin approve always deactivates `designer_customer_relationships`, heals clients stuck with `unlink_status = approved` while still linked, and adds safe RPCs / RLS for deactivating a link.
 29. **Marketplace client request link:** Run **`patch-marketplace-link-rpc.sql`** so clients can reliably link to a marketplace designer (and switch from a prior designer) when submitting a design request.
+30. **Designer create project for linked client:** Run **`patch-designer-project-create-rls.sql`** so project inserts work when a designer owns more than one profile UUID (avoids LIMIT 1 mismatch with `current_designer_profile_id()`).
 
 ### Optional demo users (only if you run `seed.sql`)
 
