@@ -141,6 +141,7 @@ export function mapProject(
     paymentNotes: row.payment_notes?.trim() || undefined,
     measurementRecordedBy: row.measurement_recorded_by as Project["measurementRecordedBy"],
     items: items.length ? items : undefined,
+    relationshipArchivedAt: row.relationship_archived_at ?? undefined,
   };
 }
 
@@ -283,8 +284,11 @@ export function buildProjectConversation(
       : project.customerUpdate,
     timestamp: last?.timestamp ?? project.lastUpdated ?? "Recently",
     avatar: isDesignerView ? resolveAvatarUrl(customerAvatar) : resolveAvatarUrl(designer.profileImage),
-    tag: "Bespoke",
-    online: true,
+    tag: project.relationshipArchivedAt ? "Archived" : "Bespoke",
+    online: !project.relationshipArchivedAt,
+    dimmed: Boolean(project.relationshipArchivedAt),
+    readOnly: Boolean(project.relationshipArchivedAt),
+    archived: Boolean(project.relationshipArchivedAt),
     contactName,
     contactRole,
     contactAvatar,

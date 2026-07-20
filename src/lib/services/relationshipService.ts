@@ -8,6 +8,11 @@ import { resolveCustomerProfileId } from "@/lib/services/customerService";
 import { resolveDesignerProfileId } from "@/lib/services/designerService";
 import { patchCustomerLink } from "@/lib/services/customerService";
 import { syncCustomerLinkFromRequest } from "@/lib/customer-access";
+import {
+  formatUnlinkBlockingMessage,
+  getUnlinkBlockingProjects,
+} from "@/lib/unlink-guards";
+import type { Project } from "@/lib/mock-data";
 
 export async function listUnlinkRequests(): Promise<UnlinkRequest[]> {
   const supabase = createClient();
@@ -46,6 +51,21 @@ export async function listUnlinkRequests(): Promise<UnlinkRequest[]> {
   });
 }
 
+export async function getUnlinkBlockingProjectsForPair(input: {
+  customerLegacyId: string;
+  designerLegacyId: string;
+}): Promise<Project[]> {
+  const { listProjects } = await import("@/lib/services/projectService");
+  const projects = await listProjects();
+  return getUnlinkBlockingProjects(
+    projects.filter(
+      (project) =>
+        project.customerId === input.customerLegacyId &&
+        project.designerId === input.designerLegacyId
+    )
+  );
+}
+
 export async function createUnlinkRequest(input: {
   customerLegacyId: string;
   customerName: string;
@@ -57,6 +77,14 @@ export async function createUnlinkRequest(input: {
   const customerId = await resolveCustomerProfileId(input.customerLegacyId);
   const designerId = await resolveDesignerProfileId(input.designerLegacyId);
   if (!customerId || !designerId) throw new Error("Unable to resolve participants");
+
+  const blocking = await getUnlinkBlockingProjectsForPair({
+    customerLegacyId: input.customerLegacyId,
+    designerLegacyId: input.designerLegacyId,
+  });
+  if (blocking.length > 0) {
+    throw new Error(formatUnlinkBlockingMessage(blocking.length));
+  }
 
   const { data: openRequest } = await supabase
     .from("unlink_requests")
@@ -199,6 +227,9 @@ export async function updateUnlinkRequest(
       p_request_id: existing.id,
     });
     if (approveError) {
+      if (/active project|Cannot approve unlink/i.test(approveError.message)) {
+        throw new Error(approveError.message);
+      }
       // Fallback for environments that have not run the SQL patch yet.
       const currentLink = await import("@/lib/services/customerService").then((m) =>
         m.getCustomerLinkState(existing.customer_id)

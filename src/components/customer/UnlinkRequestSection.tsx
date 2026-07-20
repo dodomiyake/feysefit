@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useApp } from "@/context/AppContext";
 import { Button } from "@/components/ui/Button";
 import { TextArea } from "@/components/ui/TextArea";
@@ -10,7 +10,8 @@ import {
   getMarketplaceBlockReason,
   isLinkedCustomer,
 } from "@/lib/customer-access";
-import { Link2, Shield, Info } from "lucide-react";
+import { formatUnlinkBlockingMessage, getUnlinkBlockingProjects } from "@/lib/unlink-guards";
+import { Link2, Shield, Info, AlertTriangle } from "lucide-react";
 
 const statusLabels = {
   pending: "Pending admin review",
@@ -21,15 +22,27 @@ const statusLabels = {
 };
 
 export function UnlinkRequestSection() {
-  const { customerLink, submitUnlinkRequest, canAccessMarketplace } = useApp();
+  const { customerLink, submitUnlinkRequest, canAccessMarketplace, projects } = useApp();
   const [reason, setReason] = useState("");
   const [showForm, setShowForm] = useState(false);
+
+  const blockingProjects = useMemo(() => {
+    if (!customerLink.linkedDesignerId) return [];
+    return getUnlinkBlockingProjects(
+      projects.filter(
+        (project) =>
+          project.customerId &&
+          project.designerId === customerLink.linkedDesignerId
+      )
+    );
+  }, [customerLink.linkedDesignerId, projects]);
+
+  const hasBlockingProjects = blockingProjects.length > 0;
 
   if (!isLinkedCustomer(customerLink) && customerLink.unlinkStatus !== "approved") {
     return null;
   }
 
-  const canSubmit = canCustomerRequestUnlink(customerLink);
   const trulyUnlinked =
     customerLink.unlinkStatus === "approved" && !customerLink.linkedDesignerId;
 
@@ -71,7 +84,31 @@ export function UnlinkRequestSection() {
           </div>
         )}
 
-        {canSubmit && (
+        {hasBlockingProjects && customerLink.linkedDesignerId && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+            <div className="flex gap-2">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+              <div>
+                <p className="text-sm font-medium text-amber-900">
+                  Unlinking is blocked while active projects are open
+                </p>
+                <p className="mt-1 text-xs text-amber-800/90">
+                  {formatUnlinkBlockingMessage(blockingProjects.length)} Past messages are kept
+                  when you unlink — they become archived and read-only.
+                </p>
+                <ul className="mt-2 space-y-1 text-xs text-amber-900/80">
+                  {blockingProjects.slice(0, 4).map((project) => (
+                    <li key={project.id}>
+                      {project.title} · {project.status}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {canCustomerRequestUnlink(customerLink) && !hasBlockingProjects && (
           <>
             {!showForm ? (
               <Button variant="secondary" size="sm" onClick={() => setShowForm(true)}>
@@ -83,7 +120,8 @@ export function UnlinkRequestSection() {
                   <Shield className="h-4 w-4 shrink-0 text-accent" />
                   <p>
                     Your request goes to admin with your reason. Admin will confirm with{" "}
-                    {customerLink.linkedDesignerName} before approving or declining.
+                    {customerLink.linkedDesignerName} before approving or declining. Previous
+                    messages are never deleted — they become archived and read-only after approval.
                   </p>
                 </div>
                 <TextArea

@@ -60,6 +60,7 @@ export interface Project {
   measurementRecordedBy?: MeasurementRecordedBy;
   /** Garments / clothing items within this commission. */
   items?: import("@/lib/project-items").ProjectItem[];
+  relationshipArchivedAt?: string;
 }
 
 export interface Designer {

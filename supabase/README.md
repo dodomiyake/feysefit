@@ -64,6 +64,7 @@ Then run:
 29. **Marketplace client request link:** Run **`patch-marketplace-link-rpc.sql`** so clients can reliably link to a marketplace designer (and switch from a prior designer) when submitting a design request.
 30. **Designer create project for linked client:** Run **`patch-designer-project-create-rls.sql`** so project inserts work when a designer owns more than one profile UUID (avoids LIMIT 1 mismatch with `current_designer_profile_id()`).
 31. **Multi-garment projects:** Run **`patch-project-items.sql`** so a single project can contain multiple clothing items (each with its own status, deadline, fabric, and measurements). Existing projects are backfilled with one item from their legacy fields.
+32. **Unlink archive & messaging guard:** Run **`patch-project-status-unlink-terminal.sql`** first, then **`patch-unlink-archive-messaging.sql`** (after the unlink and relationship patches). Blocks unlink while active projects remain, archives conversations read-only on approve (messages are never deleted), and lets designers retain historical project/message access without live profile or measurement access.
 
 ### Optional demo users (only if you run `seed.sql`)
 

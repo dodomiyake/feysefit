@@ -206,6 +206,10 @@ export function MessagesWorkspace() {
   const handleSend = () => {
     const text = composer.trim();
     if ((!text && pendingAttachments.length === 0) || !activeConversation) return;
+    if (activeConversation.readOnly) {
+      showToast("This conversation is archived and read-only.", "error");
+      return;
+    }
 
     const senderRole = role === "designer" ? "designer" : "customer";
     const senderName =

@@ -18,6 +18,7 @@ import {
 } from "@/lib/services/customerService";
 import { getDesignerById, listDesigners, resolveDesignerProfileId } from "@/lib/services/designerService";
 import { createProject, listProjects } from "@/lib/services/projectService";
+import { isConversationReadOnly } from "@/lib/unlink-guards";
 import type { Customer, Designer } from "@/lib/mock-data";
 
 type MessageAuthUser = {
@@ -104,6 +105,11 @@ async function findOrCreateMessagingProject(input: {
       projectUuid: existing.id,
       projectLegacyId: existing.legacy_id ?? existing.id,
     };
+  }
+
+  const link = await getCustomerLinkState(input.customerLegacyId);
+  if (!link.linkedDesignerId || link.linkedDesignerId !== input.designerLegacyId) {
+    throw new Error("You can only message your linked designer while the relationship is active.");
   }
 
   const project = await createProject({
@@ -276,7 +282,40 @@ export async function listConversations(
     }
   }
 
-  return sortConversations(conversations);
+  if (authUser.role === "customer" && authUser.customerId) {
+    const link = await getCustomerLinkState(authUser.customerId);
+    return sortConversations(
+      conversations.map((conversation) => {
+        const project = projects.find((p) => `project-${p.id}` === conversation.id);
+        const readOnly = isConversationReadOnly({
+          relationshipArchivedAt: project?.relationshipArchivedAt,
+          linkedDesignerId: link.linkedDesignerId,
+        });
+        if (!readOnly) return conversation;
+        return {
+          ...conversation,
+          readOnly: true,
+          archived: true,
+          tag: "Archived",
+          dimmed: true,
+        };
+      })
+    );
+  }
+
+  return sortConversations(
+    conversations.map((conversation) => {
+      const project = projects.find((p) => `project-${p.id}` === conversation.id);
+      if (!project?.relationshipArchivedAt) return conversation;
+      return {
+        ...conversation,
+        readOnly: true,
+        archived: true,
+        tag: "Archived",
+        dimmed: true,
+      };
+    })
+  );
 }
 
 export async function sendProjectMessage(input: {
@@ -299,6 +338,22 @@ export async function sendProjectMessage(input: {
   );
 
   const supabase = createClient();
+  const { data: projectRow } = await supabase
+    .from("projects")
+    .select("relationship_archived_at, customer_id, designer_id")
+    .eq("id", projectUuid)
+    .maybeSingle();
+  if (projectRow?.relationship_archived_at) {
+    throw new Error("This conversation is archived and read-only after unlinking.");
+  }
+
+  if (input.authUser?.customerId) {
+    const link = await getCustomerLinkState(input.authUser.customerId);
+    if (!link.linkedDesignerId) {
+      throw new Error("Link with your designer again before sending new messages.");
+    }
+  }
+
   const { data, error } = await supabase
     .from("messages")
     .insert({

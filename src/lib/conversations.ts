@@ -30,6 +30,9 @@ export interface Conversation {
   messages: ThreadMessage[];
   /** Supabase `projects.id` — used for Realtime subscriptions */
   projectUuid?: string;
+  /** Thread is archived after unlink — read-only history */
+  readOnly?: boolean;
+  archived?: boolean;
 }
 
 const EMBROIDERY_SKETCH =

@@ -142,6 +142,16 @@ export function ConversationThread({
         </div>
       </header>
 
+      {conversation.readOnly && (
+        <div className="border-b border-[#d3c3ba]/15 bg-surface/70 px-4 py-2.5 lg:px-6">
+          <p className="text-xs text-primary/65">
+            {conversation.archived
+              ? "Archived conversation — read-only history preserved after unlink."
+              : "Read-only — link with your designer to send new messages."}
+          </p>
+        </div>
+      )}
+
       {marketplaceProfileHref && (
         <div className="border-b border-[#d3c3ba]/15 bg-surface/50 px-4 py-2 lg:px-6">
           <Link href={marketplaceProfileHref} className="text-xs font-medium text-accent hover:underline">
@@ -191,6 +201,12 @@ export function ConversationThread({
         pendingAttachments={pendingAttachments}
         onAttachmentsChange={onAttachmentsChange}
         projectId={conversation.projectUuid}
+        readOnly={conversation.readOnly}
+        readOnlyMessage={
+          conversation.archived
+            ? "This conversation was archived when the designer relationship ended. Messages are kept for your records but cannot be edited or extended."
+            : "Messaging is unavailable until you link with a designer again."
+        }
       />
     </section>
   );

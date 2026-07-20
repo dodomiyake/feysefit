@@ -11,6 +11,7 @@ import { AdminExportButton } from "@/components/admin/AdminExportButton";
 import { useApp } from "@/context/AppContext";
 import type { UnlinkRequest, UnlinkRequestStatus } from "@/lib/customer-access";
 import { dedupeOpenUnlinkRequests } from "@/lib/customer-access";
+import { getUnlinkBlockingProjects } from "@/lib/unlink-guards";
 import type { DateRangeFilter } from "@/lib/admin-date-filter";
 import { isDateInRange } from "@/lib/admin-date-filter";
 import { MessageSquare, Check, X, Clock } from "lucide-react";
@@ -28,7 +29,7 @@ type StatusFilter = "all" | "active" | UnlinkRequestStatus;
 const defaultDateRange: DateRangeFilter = { preset: "all" };
 
 export function AdminUnlinkRequests() {
-  const { unlinkRequests, adminSendDesignerConfirmation, adminApproveUnlink, adminDeclineUnlink } =
+  const { unlinkRequests, adminSendDesignerConfirmation, adminApproveUnlink, adminDeclineUnlink, projects } =
     useApp();
   const [adminNotes, setAdminNotes] = useState<Record<string, string>>({});
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("active");
@@ -105,6 +106,14 @@ export function AdminUnlinkRequests() {
               request.designerConfirmation === "disputed";
             const awaitingDesigner =
               request.status === "designer_review" && request.designerConfirmation === "awaiting";
+            const blockingProjects = getUnlinkBlockingProjects(
+              projects.filter(
+                (project) =>
+                  project.customerId === request.customerId &&
+                  project.designerId === request.designerId
+              )
+            );
+            const canApprove = blockingProjects.length === 0;
 
             return (
               <Card key={request.id} padding="md" className="space-y-4">
@@ -132,6 +141,25 @@ export function AdminUnlinkRequests() {
                   </p>
                   <p className="mt-2 text-sm text-primary/80">{request.reason}</p>
                 </div>
+
+                {blockingProjects.length > 0 && request.status !== "approved" && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                    <p className="text-sm font-medium text-amber-900">
+                      {blockingProjects.length} active project(s) block approval
+                    </p>
+                    <p className="mt-1 text-xs text-amber-800/90">
+                      Complete, cancel, or move projects to Admin Support before approving unlink.
+                      Messages will be archived read-only — never deleted.
+                    </p>
+                    <ul className="mt-2 space-y-1 text-xs text-amber-900/80">
+                      {blockingProjects.map((project) => (
+                        <li key={project.id}>
+                          {project.title} · {project.status}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
                 {request.status === "pending" && (
                   <>
@@ -218,6 +246,7 @@ export function AdminUnlinkRequests() {
                       variant="zinc"
                       size="sm"
                       className="gap-2"
+                      disabled={!canApprove}
                       onClick={() => adminApproveUnlink(request.id)}
                     >
                       <Check className="h-4 w-4" /> Approve unlink
@@ -235,7 +264,9 @@ export function AdminUnlinkRequests() {
                 )}
 
                 {request.status === "approved" && (
-                  <p className="text-xs text-accent">Client unlinked — marketplace access granted.</p>
+                  <p className="text-xs text-accent">
+                    Client unlinked — conversations archived read-only. Marketplace access granted.
+                  </p>
                 )}
                 {request.status === "declined" && (
                   <p className="text-xs text-primary/50">

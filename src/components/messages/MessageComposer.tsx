@@ -24,6 +24,8 @@ interface MessageComposerProps {
   onAttachmentsChange: (attachments: MessageAttachment[]) => void;
   /** Supabase projects.id or legacy project id for project-scoped attachment paths */
   projectId?: string | null;
+  readOnly?: boolean;
+  readOnlyMessage?: string;
 }
 
 function PendingImageThumb({ url, name }: { url: string; name: string }) {
@@ -43,6 +45,8 @@ export function MessageComposer({
   pendingAttachments,
   onAttachmentsChange,
   projectId,
+  readOnly = false,
+  readOnlyMessage = "This conversation is archived and read-only.",
 }: MessageComposerProps) {
   const { showToast, authUser } = useApp();
   const useSupabase = isSupabaseEnabled();
@@ -126,6 +130,14 @@ export function MessageComposer({
   const removeAttachment = (id: string) => {
     onAttachmentsChange(pendingAttachments.filter((attachment) => attachment.id !== id));
   };
+
+  if (readOnly) {
+    return (
+      <div className="border-t border-[#d3c3ba]/20 bg-surface/80 p-4 text-center lg:p-6">
+        <p className="text-sm text-primary/70">{readOnlyMessage}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="border-t border-[#d3c3ba]/20 bg-background p-4 lg:p-6">

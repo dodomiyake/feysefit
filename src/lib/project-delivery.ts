@@ -56,6 +56,8 @@ export const STATUS_DISPLAY_LABELS: Record<ProjectStatus, string> = {
   "Issue Reported": "Issue Reported",
   "Adjustment Needed": "Adjustment Needed",
   "Re-delivered": "Re-delivered — Awaiting Customer Confirmation",
+  Cancelled: "Cancelled",
+  "Admin Support": "Admin Support",
 };
 
 /** Shorter labels for dense tables where long pills overflow columns. */
@@ -126,7 +128,12 @@ export function isPostDeliveryStatus(status: ProjectStatus | string) {
 }
 
 export function isClosedProject(status: ProjectStatus | string) {
-  return isProjectCompleted(status);
+  const normalized = normalizeProjectStatus(status);
+  return (
+    normalized === "Completed" ||
+    normalized === "Cancelled" ||
+    normalized === "Admin Support"
+  );
 }
 
 export function isActiveCommission(status: ProjectStatus | string) {

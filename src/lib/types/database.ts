@@ -253,6 +253,7 @@ export interface Database {
           delivery_confirmed_at: string | null;
           created_at: string;
           updated_at: string;
+          relationship_archived_at: string | null;
         };
         Insert: Partial<Database["public"]["Tables"]["projects"]["Row"]> & {
           project_code: string;

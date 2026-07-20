@@ -30,6 +30,8 @@ export const postDeliveryProjectStatuses = [
   "Adjustment Needed",
   "Re-delivered",
   "Completed",
+  "Cancelled",
+  "Admin Support",
 ] as const;
 
 export const LEGACY_DELIVERED_STATUS = "Delivered" as const;
@@ -47,6 +49,8 @@ export const designerPipelineStatuses = [
   "Awaiting Customer Confirmation",
   "Adjustment Needed",
   "Re-delivered",
+  "Cancelled",
+  "Admin Support",
 ] as const;
 
 export type UserRole = "designer" | "customer" | "admin";

@@ -44,7 +44,7 @@ export default function CustomerDashboardClient() {
   const linkedId = customerLink.linkedDesignerId;
   const fromContext = linkedId ? getDesignerById(linkedId) : undefined;
   const [designer, setDesigner] = useState<Designer | undefined>(fromContext);
-  const hasProject = Boolean(customerLink.linkedDesignerId && activeProject);
+  const hasProject = Boolean(activeProject);
   const showDirectHome = isDirectCustomer(customerLink) && !customerLink.linkedDesignerId;
   const palette = activeProject ? getProjectPalette(activeProject.paletteId) : null;
   const firstName = authUser?.name?.split(" ")[0] ?? "there";
@@ -99,7 +99,7 @@ export default function CustomerDashboardClient() {
 
         {showDirectHome ? (
           <DirectCustomerHome />
-        ) : hasProject && activeProject && designer ? (
+        ) : activeProject && customerLink.linkedDesignerId && designer ? (
           <>
             <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div>
@@ -171,6 +171,43 @@ export default function CustomerDashboardClient() {
                 <CustomerSpecifications project={activeProject} />
                 <CustomerReferencesPreview project={activeProject} />
               </div>
+            </div>
+          </>
+        ) : hasProject && activeProject ? (
+          <>
+            <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-accent">
+                  {customerLink.linkedDesignerId ? "Current Commission" : "Past Commission"} ·{" "}
+                  {activeProject.projectCode}
+                </p>
+                <h2 className="font-headline text-2xl font-bold text-primary lg:text-3xl">
+                  {activeProject.title}
+                </h2>
+                {!customerLink.linkedDesignerId && (
+                  <p className="mt-2 text-sm text-primary/60">
+                    You are unlinked from your designer. Project history and archived messages
+                    remain available read-only.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <CustomerProjectTimeline
+              key={`${activeProject.id}-${activeProject.status}`}
+              projectId={activeProject.id}
+            />
+
+            <CustomerProjectItemsPreview project={activeProject} />
+
+            <div className="mt-6">
+              <Link
+                href={`/projects/${activeProject.id}`}
+                className="inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline"
+              >
+                <ExternalLink className="h-4 w-4" />
+                View project history
+              </Link>
             </div>
           </>
         ) : isLinkedCustomer(customerLink) && designer ? (
