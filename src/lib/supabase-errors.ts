@@ -4,6 +4,10 @@ const SCHEMA_HINTS: Array<{ match: RegExp; hint: string }> = [
     hint: "Run supabase/patch-appointment-dates.sql in the Supabase SQL Editor (or the full patch-appointments-setup.sql bundle).",
   },
   {
+    match: /get_designer_availability_calendar/i,
+    hint: "Run supabase/patch-availability-calendar-rpc.sql in the Supabase SQL Editor.",
+  },
+  {
     match: /get_designer_appointment_holds/i,
     hint: "Run supabase/patch-appointment-dates.sql in the Supabase SQL Editor.",
   },

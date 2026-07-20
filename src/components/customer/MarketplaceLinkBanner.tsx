@@ -11,8 +11,8 @@ export function MarketplaceLinkBanner() {
         <Link href={LINKED_DESIGNER_PAGE_HREF} className="font-medium text-accent hover:underline">
           Book appointments
         </Link>{" "}
-        on their profile page. Marketplace browsing is unavailable until your project is delivered or
-        admin approves an unlink request.
+        on their profile page. Marketplace browsing stays unavailable while you are linked — request an
+        unlink from Settings if you need marketplace access.
       </p>
     </div>
   );

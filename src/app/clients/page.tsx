@@ -53,8 +53,10 @@ export default function ClientsPage() {
               Client Database
             </h1>
             <p className="mt-2 text-sm text-primary/60 lg:text-base">
-              App clients linked to your studio, plus private walk-in clients for in-person
-              work. Studio clients are never visible to other designers.
+              <span className="font-medium text-primary/80">App clients</span> have FeyseFit
+              accounts (login in Supabase).{" "}
+              <span className="font-medium text-primary/80">Studio clients</span> are private
+              walk-ins owned by you — no app login, and they will not appear in Supabase Auth.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -120,8 +122,8 @@ export default function ClientsPage() {
             </p>
             <p className="mt-1 text-sm text-primary/55">
               {tab === "app"
-                ? "Invite a client from the invite page. They appear here after accepting."
-                : "Add walk-in clients to store measurements and appointment history privately."}
+                ? "Invite a client from the invite page. They appear here after accepting and creating an account."
+                : "Add walk-in clients for in-person work. They stay local to your studio and never get a FeyseFit login."}
             </p>
           </div>
         ) : (

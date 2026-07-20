@@ -694,7 +694,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
             })
             .then(async () => {
               await refreshAppData(authUser);
+              showToast("Unlink request sent to admin");
+            })
+            .catch((error) => {
+              const message =
+                error instanceof Error ? error.message : "Could not send unlink request";
+              showToast(message, "error");
+              void refreshAppData(authUser);
             });
+          return {
+            ...prev,
+            unlinkStatus: "pending",
+            unlinkReason: reason,
+            unlinkSubmittedAt: submittedAt,
+            activeUnlinkRequestId: prev.activeUnlinkRequestId,
+          };
         } else if (useApi) {
           const newRequest: UnlinkRequest = {
             id: `ur-${Date.now()}`,
@@ -787,15 +801,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
         designerRespondedAt: respondedAt,
       };
 
+      // Optimistic: clear the action card immediately.
+      setUnlinkRequests((prev) =>
+        prev.map((r) => {
+          const target = prev.find((item) => item.id === requestId);
+          if (!target) return r;
+          const samePair =
+            r.id === requestId ||
+            (r.customerId === target.customerId &&
+              r.designerId === target.designerId &&
+              r.status === "designer_review" &&
+              (r.designerConfirmation === "awaiting" || r.designerConfirmation == null));
+          return samePair ? { ...r, ...patch } : r;
+        })
+      );
+
       if (useSupabase || useApi) {
         void (useSupabase
           ? supabaseServices.updateUnlinkRequest(requestId, patch).then(() => refreshAppData(authUser))
           : api.unlinkRequests.update(requestId, patch).then(() => refreshAppData(authUser))
-        );
-      } else {
-        setUnlinkRequests((prev) =>
-          prev.map((r) => (r.id === requestId ? { ...r, ...patch } : r))
-        );
+        ).catch(() => {
+          void refreshAppData(authUser);
+        });
       }
 
       showToast(
@@ -804,7 +831,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           : "You disputed the unlink request — admin will review"
       );
     },
-    [useApi, authUser, refreshAppData, showToast]
+    [useApi, useSupabase, authUser, refreshAppData, showToast]
   );
 
   const adminApproveUnlink = useCallback(
@@ -876,8 +903,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const getDesignerPendingConfirmations = useCallback(() => {
-    return getDesignerUnlinkQueue(unlinkRequests);
-  }, [unlinkRequests]);
+    return getDesignerUnlinkQueue(unlinkRequests, authUser?.designerId);
+  }, [unlinkRequests, authUser?.designerId]);
 
   const updateProjectStatus = useCallback(
     (projectId: string, status: ProjectStatus) => {

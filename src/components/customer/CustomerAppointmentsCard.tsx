@@ -11,7 +11,7 @@ import {
   type StudioAppointment,
 } from "@/lib/local-customer";
 import { listAppointmentsForCustomer } from "@/lib/services/appointmentService";
-import { LINKED_DESIGNER_PAGE_HREF } from "@/lib/customer-designer-links";
+import { CUSTOMER_APPOINTMENTS_HREF } from "@/lib/customer-designer-links";
 
 const statusTone: Record<string, string> = {
   requested: "bg-primary/10 text-primary",
@@ -25,7 +25,7 @@ const statusTone: Record<string, string> = {
 export function CustomerAppointmentsCard({
   variant = "dashboard",
 }: {
-  variant?: "dashboard" | "embedded";
+  variant?: "dashboard" | "embedded" | "page";
 }) {
   const { authUser, projects } = useApp();
   const customerId = authUser?.customerId;
@@ -91,47 +91,54 @@ export function CustomerAppointmentsCard({
         Confirmed and pending visits with your designer appear here. You&apos;ll also get a bell
         notification when your designer schedules or updates an appointment.
       </p>
-      <ul className="mt-4 space-y-3">
-        {upcoming.map((appointment) => (
-          <li
-            key={appointment.id}
-            className="rounded-lg border border-primary/10 bg-background/60 px-4 py-3"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <p className="text-sm font-semibold text-primary">
-                  {formatAppointmentType(appointment.appointmentType)}
-                  {" · "}
-                  {formatMeetingMode(appointment.meetingMode)}
-                </p>
-                <p className="mt-0.5 text-xs text-primary/55">
-                  {appointment.scheduledAt
-                    ? new Date(appointment.scheduledAt).toLocaleString()
-                    : appointment.status === "requested"
-                      ? "Awaiting designer confirmation"
-                      : "Date pending confirmation"}
-                </p>
-                {appointment.designerNotes && (
-                  <p className="mt-2 text-sm text-primary/75">{appointment.designerNotes}</p>
-                )}
+      {upcoming.length ? (
+        <ul className="mt-4 space-y-3">
+          {upcoming.map((appointment) => (
+            <li
+              key={appointment.id}
+              className="rounded-lg border border-primary/10 bg-background/60 px-4 py-3"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold text-primary">
+                    {formatAppointmentType(appointment.appointmentType)}
+                    {" · "}
+                    {formatMeetingMode(appointment.meetingMode)}
+                  </p>
+                  <p className="mt-0.5 text-xs text-primary/55">
+                    {appointment.scheduledAt
+                      ? new Date(appointment.scheduledAt).toLocaleString()
+                      : appointment.status === "requested"
+                        ? "Awaiting designer confirmation"
+                        : "Date pending confirmation"}
+                  </p>
+                  {appointment.designerNotes && (
+                    <p className="mt-2 text-sm text-primary/75">{appointment.designerNotes}</p>
+                  )}
+                </div>
+                <span
+                  className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                    statusTone[appointment.status] ?? "bg-primary/10 text-primary"
+                  }`}
+                >
+                  {formatAppointmentStatus(appointment.status)}
+                </span>
               </div>
-              <span
-                className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                  statusTone[appointment.status] ?? "bg-primary/10 text-primary"
-                }`}
-              >
-                {formatAppointmentStatus(appointment.status)}
-              </span>
-            </div>
-          </li>
-        ))}
-      </ul>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-4 rounded-lg border border-primary/10 bg-background/60 px-4 py-3 text-sm text-primary/70">
+          No upcoming appointments yet. Pick an open slot above when your designer has published
+          availability.
+        </p>
+      )}
       {variant === "dashboard" && (
         <Link
-          href={LINKED_DESIGNER_PAGE_HREF}
+          href={CUSTOMER_APPOINTMENTS_HREF}
           className="mt-4 inline-block text-sm font-medium text-accent hover:underline"
         >
-          Book another appointment
+          Manage appointments
         </Link>
       )}
     </section>

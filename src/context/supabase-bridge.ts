@@ -17,7 +17,7 @@ import {
   listMarketplaceApprovals,
 } from "@/lib/services/marketplaceService";
 import { getCustomerById, getCustomerLinkState, listCustomers, listCustomersForDesigner } from "@/lib/services/customerService";
-import { listDesigners } from "@/lib/services/designerService";
+import { getDesignerById, listDesigners } from "@/lib/services/designerService";
 import { listReports } from "@/lib/services/reportService";
 import { listStudioClients, listAllStudioClientsForAdmin } from "@/lib/services/studioClientService";
 import { listAppointmentsForDesigner, listAllAppointmentsForAdmin } from "@/lib/services/appointmentService";
@@ -114,7 +114,7 @@ export async function refreshSupabaseAppData(
   };
 
   try {
-    const [projects, unlinkRequests, marketplaceApprovals, liveMarketplaceDesignerIds, designers] =
+    const [projects, unlinkRequests, marketplaceApprovals, liveMarketplaceDesignerIds, listedDesigners] =
       await Promise.all([
         listProjects(),
         listUnlinkRequests(),
@@ -122,6 +122,7 @@ export async function refreshSupabaseAppData(
         listLiveMarketplaceDesignerIds(),
         listDesigners(),
       ]);
+    let designers = listedDesigners;
 
   let customers: Customer[] = [];
   if (authUser?.role === "designer" && authUser.designerId) {
@@ -154,6 +155,20 @@ export async function refreshSupabaseAppData(
       }
     } catch {
       // Pending invite may already be accepted.
+    }
+
+    // Linked invite designers are private (not marketplace_live). Ensure their profile
+    // is always in the client snapshot so booking UI can mount.
+    if (customerLink.linkedDesignerId) {
+      const alreadyLoaded = designers.some((entry) => entry.id === customerLink.linkedDesignerId);
+      if (!alreadyLoaded) {
+        try {
+          const linkedDesigner = await getDesignerById(customerLink.linkedDesignerId);
+          if (linkedDesigner) designers = [...designers, linkedDesigner];
+        } catch {
+          // Booking surfaces load the designer on demand if this fails.
+        }
+      }
     }
   }
 

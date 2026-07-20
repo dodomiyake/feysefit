@@ -208,6 +208,11 @@ async function validateAppointmentSlot(
   const activeStatus = input.status ?? "confirmed";
   if (["cancelled", "completed", "no_show"].includes(activeStatus)) return;
 
+  const scheduledMs = new Date(input.scheduledAt).getTime();
+  if (Number.isNaN(scheduledMs) || scheduledMs <= Date.now()) {
+    throw new Error("Choose a future date and time for your appointment.");
+  }
+
   const durationMinutes = input.durationMinutes ?? 60;
   const holds = await listDesignerBookedSlots(designerLegacyId);
 
@@ -215,9 +220,12 @@ async function validateAppointmentSlot(
     throw new Error("This time slot is no longer available");
   }
 
-  const isCustomerRequest =
-    activeStatus === "requested" && Boolean(input.customerId && !input.studioClientId);
-  if (!isCustomerRequest) return;
+  const isCustomerInitiated = Boolean(input.customerId && !input.studioClientId);
+  // Flexible / proposed times from clients stay as requested and may be any free future slot.
+  if (isCustomerInitiated && activeStatus === "requested") return;
+
+  // Instant confirmed bookings must land inside a published open window.
+  if (!(isCustomerInitiated && activeStatus === "confirmed")) return;
 
   const availability = await getDesignerAvailability(designerLegacyId);
   if (!availability.dates.length) {
@@ -371,6 +379,20 @@ export async function requestCustomerAppointment(
     durationMinutes?: number;
   }
 ) {
+  let status: AppointmentStatus = "requested";
+  if (input.scheduledAt) {
+    const availability = await getDesignerAvailability(designerLegacyId);
+    const durationMinutes = input.durationMinutes ?? availability.slotMinutes ?? 30;
+    const withinPublished =
+      availability.dates.length > 0 &&
+      isWithinPublishedAvailability(availability.dates, input.scheduledAt, durationMinutes);
+    const holds = await listDesignerBookedSlots(designerLegacyId);
+    const free = !slotConflictsWithHolds(input.scheduledAt, durationMinutes, holds);
+    if (withinPublished && free) {
+      status = "confirmed";
+    }
+  }
+
   return createAppointment(designerLegacyId, {
     customerId: customerLegacyId,
     projectId: input.projectId,
@@ -379,7 +401,7 @@ export async function requestCustomerAppointment(
     scheduledAt: input.scheduledAt,
     customerNotes: input.customerNotes,
     durationMinutes: input.durationMinutes,
-    status: input.scheduledAt ? "confirmed" : "requested",
+    status,
   });
 }
 

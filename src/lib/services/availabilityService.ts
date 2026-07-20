@@ -5,7 +5,7 @@ import type {
   DesignerAvailabilitySettings,
   MeetingMode,
 } from "@/lib/local-customer";
-import type { SlotBookingConflict } from "@/lib/appointment-slots";
+import { localDateKey, type SlotBookingConflict } from "@/lib/appointment-slots";
 import { resolveDesignerProfileId } from "@/lib/services/designerService";
 import { toUserFacingSupabaseError } from "@/lib/supabase-errors";
 
@@ -53,6 +53,7 @@ function mapDate(row: {
   start_time: string;
   end_time: string;
 }): DesignerAvailabilityDate {
+  const availableDate = String(row.available_date).slice(0, 10);
   const startTime = row.start_time.includes("T")
     ? row.start_time.slice(11, 16)
     : row.start_time.slice(0, 5);
@@ -62,7 +63,7 @@ function mapDate(row: {
 
   return {
     id: row.id,
-    availableDate: row.available_date,
+    availableDate,
     startTime,
     endTime,
   };
@@ -79,9 +80,44 @@ export async function getDesignerAvailability(
   if (!isSupabaseEnabled()) return readLocal(designerLegacyId);
 
   const designerId = await resolveDesignerProfileId(designerLegacyId);
-  if (!designerId) return DEFAULT_SETTINGS;
+  if (!designerId) {
+    throw new Error("Could not load this designer’s calendar. Refresh and try again.");
+  }
 
   const supabase = createClient();
+
+  // SECURITY DEFINER RPC so linked clients always see published dates (RLS-safe).
+  const { data: calendarRows, error: calendarError } = await supabase.rpc(
+    "get_designer_availability_calendar",
+    { target_designer_id: designerId }
+  );
+
+  if (!calendarError) {
+    const rows = (calendarRows ?? []) as Array<{
+      id: string;
+      available_date: string;
+      start_time: string;
+      end_time: string;
+      appointment_slot_minutes: number | null;
+      offered_meeting_modes: MeetingMode[] | null;
+    }>;
+    const todayLocal = localDateKey();
+    const futureRows = rows.filter((row) => String(row.available_date).slice(0, 10) >= todayLocal);
+    const first = futureRows[0] ?? rows[0];
+    return {
+      slotMinutes: first?.appointment_slot_minutes ?? 30,
+      offeredMeetingModes: first?.offered_meeting_modes ?? ["in_person", "video", "phone"],
+      dates: futureRows.map(mapDate),
+    };
+  }
+
+  // Missing RPC otherwise looks like “no slots published” — surface the fix instead.
+  const rpcMessage = calendarError.message ?? "";
+  if (/could not find the function|does not exist|schema cache/i.test(rpcMessage)) {
+    throw new Error(toUserFacingSupabaseError(calendarError, rpcMessage));
+  }
+
+  const todayLocal = localDateKey();
   const [{ data: profile }, { data: dates, error: datesError }] = await Promise.all([
     supabase
       .from("designer_profiles")
@@ -92,7 +128,7 @@ export async function getDesignerAvailability(
       .from("designer_availability_dates")
       .select("id, available_date, start_time, end_time")
       .eq("designer_id", designerId)
-      .gte("available_date", new Date().toISOString().slice(0, 10))
+      .gte("available_date", todayLocal)
       .order("available_date")
       .order("start_time"),
   ]);
@@ -194,6 +230,7 @@ export async function listDesignerBookedSlots(
   });
 
   if (error) {
+    // Holds are best-effort — missing RPC/table must not hide published open dates.
     const { data: fallback, error: fallbackError } = await supabase
       .from("studio_appointments")
       .select("scheduled_at, duration_minutes, status")
@@ -201,7 +238,10 @@ export async function listDesignerBookedSlots(
       .in("status", ["requested", "confirmed", "rescheduled"])
       .not("scheduled_at", "is", null);
 
-    if (fallbackError) throw new Error(toUserFacingSupabaseError(fallbackError, fallbackError.message));
+    if (fallbackError) {
+      console.error("Could not load appointment holds", fallbackError);
+      return [];
+    }
     return (fallback ?? []).map((row) => ({
       scheduledAt: row.scheduled_at ?? undefined,
       durationMinutes: row.duration_minutes,

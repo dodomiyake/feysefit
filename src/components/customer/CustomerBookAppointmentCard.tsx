@@ -1,7 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import { Calendar } from "lucide-react";
 import type { Designer } from "@/lib/mock-data";
-import { LINKED_DESIGNER_PAGE_HREF } from "@/lib/customer-designer-links";
+import { CUSTOMER_APPOINTMENTS_HREF } from "@/lib/customer-designer-links";
 
 export function CustomerBookAppointmentCard({ designer }: { designer: Designer }) {
   return (
@@ -14,15 +16,15 @@ export function CustomerBookAppointmentCard({ designer }: { designer: Designer }
           </div>
           <p className="mt-2 max-w-2xl text-sm text-primary/60">
             Request measurement, fitting, consultation, or a video session with{" "}
-            {designer.businessName}. Pick a published slot or send a flexible request — your designer
-            confirms before it is official.
+            {designer.businessName}. Open Appointments to pick a published slot or send a flexible
+            request.
           </p>
         </div>
         <Link
-          href={LINKED_DESIGNER_PAGE_HREF}
+          href={CUSTOMER_APPOINTMENTS_HREF}
           className="shrink-0 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-white"
         >
-          Request appointment
+          Open appointments
         </Link>
       </div>
     </section>

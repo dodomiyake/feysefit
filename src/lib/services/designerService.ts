@@ -24,8 +24,26 @@ export async function listDesigners(): Promise<Designer[]> {
 }
 
 export async function getDesignerById(designerId: string): Promise<Designer | null> {
-  const designers = await listDesigners();
-  return designers.find((d) => d.id === designerId) ?? null;
+  if (!designerId) return null;
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("designer_profiles")
+    .select("*")
+    .or(legacyOrIdFilter(designerId))
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+
+  const { data: portfolios } = await supabase
+    .from("portfolio_images")
+    .select("url, sort_order")
+    .eq("designer_id", data.id)
+    .order("sort_order");
+
+  return mapDesigner(
+    data,
+    (portfolios ?? []).map((item) => item.url)
+  );
 }
 
 export async function listLiveMarketplaceDesignerIds(): Promise<string[]> {

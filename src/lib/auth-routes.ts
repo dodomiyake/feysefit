@@ -79,6 +79,7 @@ export function getAuthRequirement(pathname: string): AuthRequirement {
     pathname.startsWith("/settings") ||
     pathname.startsWith("/onboarding/") ||
     pathname.startsWith("/appointments") ||
+    pathname.startsWith("/my-appointments") ||
     pathname.startsWith("/my-designer") ||
     pathname.startsWith("/clients") ||
     pathname.startsWith("/auth/mfa")

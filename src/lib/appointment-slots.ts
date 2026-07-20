@@ -11,6 +11,15 @@ export interface SlotBookingConflict {
   status: AppointmentStatus | string;
 }
 
+/** Local calendar date YYYY-MM-DD (avoids UTC day-rollover hiding same-day slots). */
+export function localDateKey(date: Date = new Date()) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
 function parseTimeToMinutes(time: string) {
   const [hours, minutes] = time.split(":").map(Number);
   return hours * 60 + (minutes || 0);

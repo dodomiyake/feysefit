@@ -6,15 +6,14 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { TextArea } from "@/components/ui/TextArea";
 import { Badge } from "@/components/ui/Badge";
-import { getDesignerUnlinkQueue } from "@/lib/customer-access";
 import { AlertTriangle, Check, Inbox, MessageSquare, Unlink } from "lucide-react";
 
 export function DesignerUnlinkConfirmations() {
-  const { unlinkRequests, designerRespondToUnlink } = useApp();
+  const { getDesignerPendingConfirmations, designerRespondToUnlink } = useApp();
   const [responses, setResponses] = useState<Record<string, string>>({});
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const pending = getDesignerUnlinkQueue(unlinkRequests);
+  const pending = getDesignerPendingConfirmations();
 
   return (
         <section id="unlink-requests" className="mb-8 scroll-mt-24">

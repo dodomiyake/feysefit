@@ -10,6 +10,7 @@ import { AdminDateRangeFilter } from "@/components/admin/AdminDateRangeFilter";
 import { AdminExportButton } from "@/components/admin/AdminExportButton";
 import { useApp } from "@/context/AppContext";
 import type { UnlinkRequest, UnlinkRequestStatus } from "@/lib/customer-access";
+import { dedupeOpenUnlinkRequests } from "@/lib/customer-access";
 import type { DateRangeFilter } from "@/lib/admin-date-filter";
 import { isDateInRange } from "@/lib/admin-date-filter";
 import { MessageSquare, Check, X, Clock } from "lucide-react";
@@ -34,7 +35,12 @@ export function AdminUnlinkRequests() {
   const [dateRange, setDateRange] = useState<DateRangeFilter>(defaultDateRange);
 
   const filtered = useMemo(() => {
-    return unlinkRequests.filter((request) => {
+    const source =
+      statusFilter === "active" || statusFilter === "pending" || statusFilter === "designer_review"
+        ? dedupeOpenUnlinkRequests(unlinkRequests)
+        : unlinkRequests;
+
+    return source.filter((request) => {
       if (statusFilter === "active") {
         if (request.status === "approved" || request.status === "declined") return false;
       } else if (statusFilter !== "all" && request.status !== statusFilter) {

@@ -16,7 +16,34 @@ export async function listUnlinkRequests(): Promise<UnlinkRequest[]> {
     .select("*")
     .order("submitted_at", { ascending: false });
   if (error) throw new Error(error.message);
-  return (data ?? []).map(mapUnlinkRequest);
+
+  const designerIds = [...new Set((data ?? []).map((row) => row.designer_id).filter(Boolean))];
+  const customerIds = [...new Set((data ?? []).map((row) => row.customer_id).filter(Boolean))];
+
+  const [{ data: designers }, { data: customers }] = await Promise.all([
+    designerIds.length
+      ? supabase.from("designer_profiles").select("id, legacy_id").in("id", designerIds)
+      : Promise.resolve({ data: [] as { id: string; legacy_id: string | null }[] }),
+    customerIds.length
+      ? supabase.from("customer_profiles").select("id, legacy_id").in("id", customerIds)
+      : Promise.resolve({ data: [] as { id: string; legacy_id: string | null }[] }),
+  ]);
+
+  const designerKeyById = new Map(
+    (designers ?? []).map((row) => [row.id, profileId(row)] as const)
+  );
+  const customerKeyById = new Map(
+    (customers ?? []).map((row) => [row.id, profileId(row)] as const)
+  );
+
+  return (data ?? []).map((row) => {
+    const mapped = mapUnlinkRequest(row);
+    return {
+      ...mapped,
+      designerId: designerKeyById.get(row.designer_id) ?? mapped.designerId,
+      customerId: customerKeyById.get(row.customer_id) ?? mapped.customerId,
+    };
+  });
 }
 
 export async function createUnlinkRequest(input: {
@@ -30,6 +57,17 @@ export async function createUnlinkRequest(input: {
   const customerId = await resolveCustomerProfileId(input.customerLegacyId);
   const designerId = await resolveDesignerProfileId(input.designerLegacyId);
   if (!customerId || !designerId) throw new Error("Unable to resolve participants");
+
+  const { data: openRequest } = await supabase
+    .from("unlink_requests")
+    .select("id")
+    .eq("customer_id", customerId)
+    .in("status", ["pending", "designer_review"])
+    .limit(1)
+    .maybeSingle();
+  if (openRequest) {
+    throw new Error("You already have an open unlink request with admin.");
+  }
 
   const submittedAt = new Date().toLocaleDateString("en-GB", {
     day: "numeric",
@@ -74,20 +112,82 @@ export async function updateUnlinkRequest(
     .maybeSingle();
   if (!existing) throw new Error("Request not found");
 
+  const updates: {
+    status?: string;
+    admin_notes?: string | null;
+    admin_contacted_at?: string | null;
+    designer_confirmation?: string | null;
+    designer_response?: string | null;
+    designer_responded_at?: string | null;
+  } = {};
+  if (patch.status !== undefined) updates.status = patch.status;
+  if (patch.adminNotes !== undefined) updates.admin_notes = patch.adminNotes ?? null;
+  if (patch.adminContactedAt !== undefined) {
+    updates.admin_contacted_at = patch.adminContactedAt ?? null;
+  }
+  if (patch.designerConfirmation !== undefined) {
+    updates.designer_confirmation = patch.designerConfirmation;
+  }
+  if (patch.designerResponse !== undefined) {
+    updates.designer_response = patch.designerResponse ?? null;
+  }
+  if (patch.designerRespondedAt !== undefined) {
+    updates.designer_responded_at = patch.designerRespondedAt ?? null;
+  }
+
+  if (!Object.keys(updates).length) {
+    return mapUnlinkRequest(existing);
+  }
+
   const { data, error } = await supabase
     .from("unlink_requests")
-    .update({
-      status: patch.status,
-      admin_notes: patch.adminNotes,
-      admin_contacted_at: patch.adminContactedAt,
-      designer_confirmation: patch.designerConfirmation,
-      designer_response: patch.designerResponse,
-      designer_responded_at: patch.designerRespondedAt,
-    })
+    .update(updates)
     .eq("id", existing.id)
     .select("*")
     .single();
   if (error) throw new Error(error.message);
+
+  // Close duplicate open rows for the same client↔designer when promoting/responding.
+  if (
+    patch.status === "designer_review" ||
+    patch.designerConfirmation === "confirmed" ||
+    patch.designerConfirmation === "disputed" ||
+    patch.status === "approved" ||
+    patch.status === "declined"
+  ) {
+    await supabase
+      .from("unlink_requests")
+      .update({
+        status: "declined",
+        admin_notes: "Closed as duplicate of the active unlink request.",
+        designer_confirmation: null,
+        designer_response: "Superseded by another unlink request for this relationship.",
+        designer_responded_at: patch.adminContactedAt ?? patch.designerRespondedAt ?? new Date().toISOString(),
+      })
+      .eq("customer_id", existing.customer_id)
+      .eq("designer_id", existing.designer_id)
+      .in("status", ["pending", "designer_review"])
+      .neq("id", existing.id);
+  }
+
+  // Keep designer confirmation in sync if siblings somehow remain in review.
+  if (
+    patch.designerConfirmation === "confirmed" ||
+    patch.designerConfirmation === "disputed"
+  ) {
+    await supabase
+      .from("unlink_requests")
+      .update({
+        designer_confirmation: patch.designerConfirmation,
+        designer_response: patch.designerResponse ?? "Resolved with related unlink request.",
+        designer_responded_at: patch.designerRespondedAt ?? new Date().toISOString(),
+      })
+      .eq("customer_id", existing.customer_id)
+      .eq("designer_id", existing.designer_id)
+      .eq("status", "designer_review")
+      .eq("designer_confirmation", "awaiting")
+      .neq("id", existing.id);
+  }
 
   const mapped = mapUnlinkRequest(data);
   const currentLink = await import("@/lib/services/customerService").then((m) =>

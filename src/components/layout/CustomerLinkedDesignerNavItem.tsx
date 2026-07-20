@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Calendar } from "lucide-react";
+import { UserCircle } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { isLinkedCustomer } from "@/lib/customer-access";
 import { LINKED_DESIGNER_PAGE_HREF } from "@/lib/customer-designer-links";
@@ -32,7 +32,7 @@ export function CustomerLinkedDesignerNavItem({ variant }: CustomerLinkedDesigne
   if (variant === "sidebar") {
     return (
       <Link href={LINKED_DESIGNER_PAGE_HREF} className={sidebarNavClass(isActive)}>
-        <Calendar className="h-[18px] w-[18px]" strokeWidth={isActive ? 2.25 : 1.75} />
+        <UserCircle className="h-[18px] w-[18px]" strokeWidth={isActive ? 2.25 : 1.75} />
         <span className="flex-1 truncate">{label}</span>
       </Link>
     );
@@ -46,7 +46,7 @@ export function CustomerLinkedDesignerNavItem({ variant }: CustomerLinkedDesigne
         isActive ? "text-accent" : "text-primary/50 hover:text-primary"
       )}
     >
-      <Calendar className={cn("h-5 w-5 shrink-0", isActive && "stroke-[2.5]")} />
+      <UserCircle className={cn("h-5 w-5 shrink-0", isActive && "stroke-[2.5]")} />
       <span className="truncate font-medium">{label}</span>
     </Link>
   );

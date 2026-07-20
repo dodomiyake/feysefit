@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { CalendarClock, Plus, Trash2 } from "lucide-react";
-import { formatAvailabilityDateLabel } from "@/lib/appointment-slots";
+import { formatAvailabilityDateLabel, localDateKey } from "@/lib/appointment-slots";
 import {
   APPOINTMENT_TYPE_OPTIONS,
   MEETING_MODE_OPTIONS,
@@ -32,7 +32,7 @@ export function SettingsAvailabilityCard({
   onChange,
 }: SettingsAvailabilityCardProps) {
   const [newDate, setNewDate] = useState("");
-  const minDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const minDate = useMemo(() => localDateKey(), []);
 
   function addDate() {
     if (!newDate) return;
@@ -82,8 +82,9 @@ export function SettingsAvailabilityCard({
         <div>
           <h3 className="text-lg font-semibold text-primary">Appointment availability</h3>
           <p className="mt-1 text-sm text-primary/60">
-            Add the specific dates you are available. Linked clients will only see open slots on
-            those dates. Once a slot is requested, other clients cannot book the same time.
+            Add the specific dates you are available, then tap Save. Linked clients will see open
+            slots on those dates on their dashboard and My Designer page. Once a slot is requested,
+            other clients cannot book the same time.
           </p>
         </div>
       </div>

@@ -663,6 +663,17 @@ export interface Database {
           status: string;
         }[];
       };
+      get_designer_availability_calendar: {
+        Args: { target_designer_id: string };
+        Returns: {
+          id: string;
+          available_date: string;
+          start_time: string;
+          end_time: string;
+          appointment_slot_minutes: number;
+          offered_meeting_modes: string[];
+        }[];
+      };
       lookup_invite_code: {
         Args: { invite_code: string };
         Returns: Json;

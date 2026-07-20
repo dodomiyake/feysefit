@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { SiteFooter } from "@/components/layout/SiteFooter";
@@ -10,8 +10,6 @@ import { CustomerDesignerMessage } from "@/components/customer/CustomerDesignerM
 import { CustomerDesignerPanel } from "@/components/customer/CustomerDesignerPanel";
 import { CustomerSpecifications } from "@/components/customer/CustomerSpecifications";
 import { CustomerReferencesPreview } from "@/components/customer/CustomerReferencesPreview";
-import { CustomerAppointmentsCard } from "@/components/customer/CustomerAppointmentsCard";
-import { CustomerBookAppointmentCard } from "@/components/customer/CustomerBookAppointmentCard";
 import { MarketplaceLinkBanner } from "@/components/customer/MarketplaceLinkBanner";
 import { DirectCustomerHome } from "@/components/customer/DirectCustomerHome";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -29,6 +27,8 @@ import {
   isProjectCompleted,
   REDELIVERED_STATUS,
 } from "@/lib/project-delivery";
+import { getDesignerById as fetchDesignerById } from "@/lib/services/designerService";
+import type { Designer } from "@/lib/mock-data";
 import { Ruler, Upload, FolderOpen, ExternalLink } from "lucide-react";
 
 export default function CustomerDashboardClient() {
@@ -40,9 +40,9 @@ export default function CustomerDashboardClient() {
   const isRedelivery = activeProject?.status === REDELIVERED_STATUS;
   const isCompleted = activeProject ? isProjectCompleted(activeProject.status) : false;
   const isPostDelivery = activeProject ? isPostDeliveryStatus(activeProject.status) : false;
-  const designer = customerLink.linkedDesignerId
-    ? getDesignerById(customerLink.linkedDesignerId)
-    : undefined;
+  const linkedId = customerLink.linkedDesignerId;
+  const fromContext = linkedId ? getDesignerById(linkedId) : undefined;
+  const [designer, setDesigner] = useState<Designer | undefined>(fromContext);
   const hasProject = Boolean(customerLink.linkedDesignerId && activeProject);
   const showDirectHome = isDirectCustomer(customerLink) && !customerLink.linkedDesignerId;
   const palette = activeProject ? getProjectPalette(activeProject.paletteId) : null;
@@ -51,6 +51,28 @@ export default function CustomerDashboardClient() {
   useEffect(() => {
     void syncProjects();
   }, [syncProjects]);
+
+  useEffect(() => {
+    if (fromContext) {
+      setDesigner(fromContext);
+      return;
+    }
+    if (!linkedId) {
+      setDesigner(undefined);
+      return;
+    }
+    let cancelled = false;
+    void fetchDesignerById(linkedId)
+      .then((loaded) => {
+        if (!cancelled) setDesigner(loaded ?? undefined);
+      })
+      .catch(() => {
+        if (!cancelled) setDesigner(undefined);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fromContext, linkedId]);
 
   return (
     <AppShell mobileTitle="My Dashboard" showMobileTopBar>
@@ -73,12 +95,6 @@ export default function CustomerDashboardClient() {
         </div>
 
         {!canAccessMarketplace && isLinkedCustomer(customerLink) && <MarketplaceLinkBanner />}
-
-        {isLinkedCustomer(customerLink) && designer && (
-          <CustomerBookAppointmentCard designer={designer} />
-        )}
-
-        {isLinkedCustomer(customerLink) && <CustomerAppointmentsCard />}
 
         {showDirectHome ? (
           <DirectCustomerHome />
@@ -158,7 +174,7 @@ export default function CustomerDashboardClient() {
           <EmptyState
             icon={FolderOpen}
             title="No active project"
-            description="Once your designer creates a project for you, you'll see progress and updates here. You can still request appointments using the card above."
+            description="Once your designer creates a project for you, you'll see progress and updates here."
           />
         ) : (
           <EmptyState
