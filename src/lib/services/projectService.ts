@@ -229,6 +229,22 @@ export async function createProject(input: {
     studioClientUuid = studioRow?.id ?? null;
   }
 
+  // Platform clients require an active designer↔client link (anti-poaching RLS).
+  if (customerProfileId && !studioClientUuid) {
+    const { data: relationship } = await supabase
+      .from("designer_customer_relationships")
+      .select("id")
+      .eq("designer_id", input.designerProfileId)
+      .eq("customer_id", customerProfileId)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (!relationship) {
+      throw new Error(
+        "You can only create projects for clients linked to you. This client may be linked to another designer."
+      );
+    }
+  }
+
   const code = `FF-${Date.now().toString().slice(-6)}`;
   const lastUpdated = formatLastUpdated();
   const now = new Date().toISOString();
@@ -259,7 +275,14 @@ export async function createProject(input: {
     })
     .select("*")
     .single();
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (/row-level security/i.test(error.message)) {
+      throw new Error(
+        "You can only create projects for clients linked to you. This client may be linked to another designer."
+      );
+    }
+    throw new Error(error.message);
+  }
   return mapProject(data, []);
 }
 

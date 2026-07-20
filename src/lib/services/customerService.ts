@@ -95,6 +95,16 @@ export async function getCustomerLinkState(customerProfileId: string): Promise<C
     .eq("is_active", true)
     .maybeSingle();
 
+  // Heal: approved unlink must not leave an active designer link.
+  if (customer.unlink_status === "approved" && relationship?.designer_id) {
+    const { error: deactivateError } = await supabase.rpc("deactivate_customer_relationships", {
+      p_customer_id: customer.id,
+    });
+    if (!deactivateError) {
+      return mapCustomerLink(customer, null);
+    }
+  }
+
   let designer = null;
   if (relationship?.designer_id) {
     const { data } = await supabase
