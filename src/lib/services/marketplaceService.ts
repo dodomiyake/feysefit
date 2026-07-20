@@ -4,7 +4,7 @@ import { mapMarketplaceListing } from "@/lib/supabase/mappers";
 import type { MarketplaceApproval } from "@/lib/marketplace-approvals";
 import { isSupabaseEnabled } from "@/lib/config/backend";
 import { projectOutfitTypes } from "@/lib/project-outfit-types";
-import { patchCustomerLink } from "@/lib/services/customerService";
+import { patchCustomerLink, resolveCustomerProfileId } from "@/lib/services/customerService";
 import { sendProjectMessage } from "@/lib/services/messageService";
 import { createProjectForDesignerLegacyId } from "@/lib/services/projectService";
 import {
@@ -87,23 +87,61 @@ export async function submitMarketplaceDesignRequest(
     throw new Error("Describe your vision before sending the request.");
   }
 
-  await patchCustomerLink(input.customerLegacyId, {
-    linkedDesignerId: input.designerLegacyId,
-    linkedDesignerName: input.designerDisplayName,
-    registrationType: "direct",
+  const designerProfileId = await resolveDesignerProfileId(input.designerLegacyId);
+  if (!designerProfileId) throw new Error("Designer not found");
+
+  const supabase = createClient();
+
+  // Prefer privileged RPC so unlink-heal / multi-link RLS cannot break requests.
+  const { error: linkRpcError } = await supabase.rpc("link_customer_to_marketplace_designer", {
+    p_designer_id: designerProfileId,
   });
 
-  const project = await createProjectForDesignerLegacyId(input.designerLegacyId, {
-    title: `${outfitLabel} — ${input.customerName}`,
-    customerId: input.customerLegacyId,
-    customerName: input.customerName,
-    outfitType: outfitLabel,
-    deadline,
-    budget,
-    customerUpdate: buildProjectCustomerUpdate(description),
-    internalNotes: "Created from marketplace design request.",
-    description: description.trim(),
-  });
+  if (linkRpcError) {
+    // Fallback when SQL patch has not been applied yet.
+    await patchCustomerLink(input.customerLegacyId, {
+      linkedDesignerId: input.designerLegacyId,
+      linkedDesignerName: input.designerDisplayName,
+      registrationType: "direct",
+      unlinkStatus: "none",
+      unlinkReason: null,
+      unlinkSubmittedAt: null,
+      activeUnlinkRequestId: null,
+    });
+  }
+
+  const customerProfileId = await resolveCustomerProfileId(input.customerLegacyId);
+  if (!customerProfileId) throw new Error("Client profile not found.");
+
+  const { data: linked } = await supabase
+    .from("designer_customer_relationships")
+    .select("id")
+    .eq("designer_id", designerProfileId)
+    .eq("customer_id", customerProfileId)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (!linked) {
+    throw new Error(
+      "Could not link to this designer. Run the marketplace link SQL patch in Supabase, then try again."
+    );
+  }
+
+  const project = await createProjectForDesignerLegacyId(
+    input.designerLegacyId,
+    {
+      title: `${outfitLabel} — ${input.customerName}`,
+      customerId: input.customerLegacyId,
+      customerName: input.customerName,
+      outfitType: outfitLabel,
+      deadline,
+      budget,
+      customerUpdate: buildProjectCustomerUpdate(description),
+      internalNotes: "Created from marketplace design request.",
+      description: description.trim(),
+    },
+    { skipActiveLinkCheck: true }
+  );
 
   const designerFirstName = input.designerDisplayName.split(" ")[0];
   await sendProjectMessage({

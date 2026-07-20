@@ -637,6 +637,10 @@ export interface Database {
         Args: { p_request_id: string };
         Returns: undefined;
       };
+      link_customer_to_marketplace_designer: {
+        Args: { p_designer_id: string };
+        Returns: undefined;
+      };
       apply_customer_measurement_submission: {
         Args: {
           measurement_values: Record<string, string>;

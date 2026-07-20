@@ -61,6 +61,7 @@ Then run:
 26. **Account security screen:** Run **`patch-account-security.sql`** after step 24. Adds `users.password_changed_at`, the user-facing `account_activity` feed (redacted IP / coarse device hints), and RPCs `log_account_activity` + `mark_password_changed`. Open **Settings → Account security** (`/settings/security`) for password, MFA, sessions (this / others / all), and activity.
 27. **JWT lifetime (production):** In Supabase → **Project Settings → Authentication → JWT expiry**, keep access-token lifetime relatively short (about **3600 seconds / 1 hour** recommended). Session sign-out scopes revoke refresh tokens immediately, but access JWTs can remain valid until they expire — a short lifetime limits the window after “sign out all devices”.
 28. **Approve unlink clears designer link:** Run **`patch-approve-unlink-clear-link.sql`** so admin approve always deactivates `designer_customer_relationships`, heals clients stuck with `unlink_status = approved` while still linked, and adds safe RPCs / RLS for deactivating a link.
+29. **Marketplace client request link:** Run **`patch-marketplace-link-rpc.sql`** so clients can reliably link to a marketplace designer (and switch from a prior designer) when submitting a design request.
 
 ### Optional demo users (only if you run `seed.sql`)
 

@@ -198,22 +198,28 @@ export async function getProjectById(projectId: string): Promise<Project | null>
   return mapProject(row.project, row.references, designer, customer);
 }
 
-export async function createProject(input: {
-  title: string;
-  customerId?: string;
-  customerName: string;
-  outfitType: string;
-  deadline: string;
-  budget: string;
-  designerProfileId: string;
-  studioClientId?: string;
-  description?: string;
-  referenceImages?: string[];
-  internalNotes?: string;
-  customerUpdate?: string;
-  measurements?: Record<string, string>;
-  measurementRecordedBy?: "customer" | "designer";
-}) {
+export async function createProject(
+  input: {
+    title: string;
+    customerId?: string;
+    customerName: string;
+    outfitType: string;
+    deadline: string;
+    budget: string;
+    designerProfileId: string;
+    studioClientId?: string;
+    description?: string;
+    referenceImages?: string[];
+    internalNotes?: string;
+    customerUpdate?: string;
+    measurements?: Record<string, string>;
+    measurementRecordedBy?: "customer" | "designer";
+  },
+  options?: {
+    /** Marketplace enquiries are customer-authored; skip designer anti-poach preflight. */
+    skipActiveLinkCheck?: boolean;
+  }
+) {
   const supabase = createClient();
   const customerProfileId = input.customerId
     ? await resolveCustomerProfileId(input.customerId)
@@ -229,19 +235,30 @@ export async function createProject(input: {
     studioClientUuid = studioRow?.id ?? null;
   }
 
-  // Platform clients require an active designer↔client link (anti-poaching RLS).
-  if (customerProfileId && !studioClientUuid) {
-    const { data: relationship } = await supabase
-      .from("designer_customer_relationships")
-      .select("id")
-      .eq("designer_id", input.designerProfileId)
-      .eq("customer_id", customerProfileId)
-      .eq("is_active", true)
-      .maybeSingle();
-    if (!relationship) {
-      throw new Error(
-        "You can only create projects for clients linked to you. This client may be linked to another designer."
-      );
+  // Only designers creating for a platform client need a preflight link check.
+  // Never run this for marketplace customer requests — it blocks all clients.
+  if (!options?.skipActiveLinkCheck && customerProfileId && !studioClientUuid) {
+    const userId = (await supabase.auth.getUser()).data.user?.id;
+    if (userId) {
+      const { data: designerRow } = await supabase
+        .from("designer_profiles")
+        .select("id")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (designerRow?.id) {
+        const { data: relationship } = await supabase
+          .from("designer_customer_relationships")
+          .select("id")
+          .eq("designer_id", designerRow.id)
+          .eq("customer_id", customerProfileId)
+          .eq("is_active", true)
+          .maybeSingle();
+        if (!relationship) {
+          throw new Error(
+            "You can only create projects for clients linked to you. This client may be linked to another designer."
+          );
+        }
+      }
     }
   }
 
@@ -277,6 +294,11 @@ export async function createProject(input: {
     .single();
   if (error) {
     if (/row-level security/i.test(error.message)) {
+      if (options?.skipActiveLinkCheck) {
+        throw new Error(
+          "Could not submit this marketplace request. Confirm the designer is live, then try again."
+        );
+      }
       throw new Error(
         "You can only create projects for clients linked to you. This client may be linked to another designer."
       );
@@ -472,11 +494,12 @@ export async function removeCustomerReference(projectId: string, referenceId: st
 
 export async function createProjectForDesignerLegacyId(
   designerLegacyId: string,
-  input: Omit<Parameters<typeof createProject>[0], "designerProfileId">
+  input: Omit<Parameters<typeof createProject>[0], "designerProfileId">,
+  options?: Parameters<typeof createProject>[1]
 ) {
   const designerProfileId = await resolveDesignerProfileId(designerLegacyId);
   if (!designerProfileId) throw new Error("Designer not found");
-  return createProject({ ...input, designerProfileId });
+  return createProject({ ...input, designerProfileId }, options);
 }
 
 export async function updateCustomerFabricSelection(

@@ -93,17 +93,12 @@ export async function getCustomerLinkState(customerProfileId: string): Promise<C
     .select("designer_id")
     .eq("customer_id", customer.id)
     .eq("is_active", true)
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
-  // Heal: approved unlink must not leave an active designer link.
-  if (customer.unlink_status === "approved" && relationship?.designer_id) {
-    const { error: deactivateError } = await supabase.rpc("deactivate_customer_relationships", {
-      p_customer_id: customer.id,
-    });
-    if (!deactivateError) {
-      return mapCustomerLink(customer, null);
-    }
-  }
+  // Do not auto-deactivate here — that races with marketplace re-link.
+  // Approved+still-linked rows are healed by SQL patch / admin approve RPC.
 
   let designer = null;
   if (relationship?.designer_id) {
@@ -187,26 +182,61 @@ export async function patchCustomerLink(
         if (relationshipError) throw new Error(relationshipError.message);
       }
     } else {
+      // Starting a new link clears a prior approved unlink so heal logic won't
+      // immediately deactivate the relationship we are about to create.
+      if (patch.unlinkStatus === undefined) {
+        profilePatch.unlink_status = "none";
+        profilePatch.unlink_reason = null;
+        profilePatch.unlink_submitted_at = null;
+        profilePatch.active_unlink_request_id = null;
+        const { error: clearUnlinkError } = await supabase
+          .from("customer_profiles")
+          .update(profilePatch)
+          .eq("id", customer.id);
+        if (clearUnlinkError) throw new Error(clearUnlinkError.message);
+      }
+
       const { resolveDesignerProfileId } = await import("@/lib/services/designerService");
       const designerId = await resolveDesignerProfileId(patch.linkedDesignerId);
-      if (designerId) {
-        const { error: relationshipError } = await supabase.from("designer_customer_relationships").upsert(
-          {
-            designer_id: designerId,
-            customer_id: customer.id,
-            registration_type: resolvedRegistrationType,
-            is_active: true,
-          },
-          { onConflict: "designer_id,customer_id" }
-        );
+      if (!designerId) throw new Error("Designer not found");
+
+      // One active designer at a time.
+      const { error: deactivateOthersError } = await supabase.rpc(
+        "deactivate_customer_relationships",
+        { p_customer_id: customer.id }
+      );
+      if (deactivateOthersError) {
+        const { error: relationshipError } = await supabase
+          .from("designer_customer_relationships")
+          .update({ is_active: false })
+          .eq("customer_id", customer.id)
+          .eq("is_active", true);
         if (relationshipError) throw new Error(relationshipError.message);
       }
+
+      const { error: relationshipError } = await supabase.from("designer_customer_relationships").upsert(
+        {
+          designer_id: designerId,
+          customer_id: customer.id,
+          registration_type: resolvedRegistrationType,
+          is_active: true,
+        },
+        { onConflict: "designer_id,customer_id" }
+      );
+      if (relationshipError) throw new Error(relationshipError.message);
     }
   }
 
   const next = await getCustomerLinkState(customer.id);
   if (patch.linkedDesignerId === null && next.linkedDesignerId) {
     throw new Error("Could not clear the designer link. Ask admin to re-approve the unlink.");
+  }
+  if (
+    patch.linkedDesignerId &&
+    patch.linkedDesignerId !== null &&
+    !next.linkedDesignerId
+  ) {
+    throw new Error("Could not link to this designer. Try again or pick another artisan.");
   }
   return next;
 }
