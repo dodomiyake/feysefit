@@ -45,24 +45,39 @@ export function isLinkedCustomer(state: CustomerLinkState): boolean {
 }
 
 export function canCustomerAccessMarketplace(state: CustomerLinkState): boolean {
-  // Privately linked clients stay off the marketplace until admin unlinks them.
-  if (!isLinkedCustomer(state)) return true;
+  // An active private designer link always blocks marketplace browsing.
+  if (state.linkedDesignerId) return false;
+  // Unlink approved and designer cleared — marketplace opens.
   if (state.unlinkStatus === "approved") return true;
-  // Still linked (including after a completed project) — no marketplace.
+  // Never linked (or direct signup still browsing) — marketplace open.
+  if (!isLinkedCustomer(state)) return true;
+  // Invited / linked registration without an active designer id yet.
   return false;
 }
 
 export function getCustomerAccountLabel(state: CustomerLinkState): string {
-  if (isLinkedCustomer(state) && state.linkedDesignerId) {
-    return "Linked Account";
-  }
+  if (state.linkedDesignerId) return "Linked Account";
   if (isLinkedCustomer(state) && state.unlinkStatus !== "approved") {
     return "Linked Account";
   }
   return "Marketplace Member";
 }
 
+/** True when the client still has a designer link and can start (or restart) an unlink. */
+export function canCustomerRequestUnlink(state: CustomerLinkState): boolean {
+  if (!state.linkedDesignerId) return false;
+  return (
+    state.unlinkStatus === "none" ||
+    state.unlinkStatus === "declined" ||
+    // Stale approve left the relationship active — allow a fresh unlink request.
+    state.unlinkStatus === "approved"
+  );
+}
+
 export function getMarketplaceBlockReason(state: CustomerLinkState): string {
+  if (state.linkedDesignerId && state.unlinkStatus === "approved") {
+    return "Your unlink was approved, but your designer link is still active. Request to unlink again so admin can finish clearing it.";
+  }
   if (state.unlinkStatus === "pending") {
     return "Your unlink request is with our admin team. Marketplace access will be available if approved.";
   }

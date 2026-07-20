@@ -629,6 +629,14 @@ export interface Database {
         Args: { p_customer_id: string };
         Returns: undefined;
       };
+      deactivate_customer_relationships: {
+        Args: { p_customer_id: string };
+        Returns: undefined;
+      };
+      approve_customer_unlink: {
+        Args: { p_request_id: string };
+        Returns: undefined;
+      };
       apply_customer_measurement_submission: {
         Args: {
           measurement_values: Record<string, string>;

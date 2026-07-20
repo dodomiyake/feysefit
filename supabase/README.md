@@ -60,6 +60,7 @@ Then run:
 25. **Brute-force / CAPTCHA (production):** In Supabase → **Authentication → Attack Protection**, review rate limits and enable **CAPTCHA** with **Cloudflare Turnstile**. Set `NEXT_PUBLIC_TURNSTILE_SITE_KEY` in `.env` (and the Turnstile secret in the Supabase dashboard). The app shows Turnstile after repeated failures and enforces temporary cooldowns; password-reset and verification-resend are also limited with generic success messages.
 26. **Account security screen:** Run **`patch-account-security.sql`** after step 24. Adds `users.password_changed_at`, the user-facing `account_activity` feed (redacted IP / coarse device hints), and RPCs `log_account_activity` + `mark_password_changed`. Open **Settings → Account security** (`/settings/security`) for password, MFA, sessions (this / others / all), and activity.
 27. **JWT lifetime (production):** In Supabase → **Project Settings → Authentication → JWT expiry**, keep access-token lifetime relatively short (about **3600 seconds / 1 hour** recommended). Session sign-out scopes revoke refresh tokens immediately, but access JWTs can remain valid until they expire — a short lifetime limits the window after “sign out all devices”.
+28. **Approve unlink clears designer link:** Run **`patch-approve-unlink-clear-link.sql`** so admin approve always deactivates `designer_customer_relationships`, heals clients stuck with `unlink_status = approved` while still linked, and adds safe RPCs / RLS for deactivating a link.
 
 ### Optional demo users (only if you run `seed.sql`)
 

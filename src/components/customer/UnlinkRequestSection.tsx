@@ -5,7 +5,11 @@ import { useApp } from "@/context/AppContext";
 import { Button } from "@/components/ui/Button";
 import { TextArea } from "@/components/ui/TextArea";
 import { Badge } from "@/components/ui/Badge";
-import { getMarketplaceBlockReason, isLinkedCustomer } from "@/lib/customer-access";
+import {
+  canCustomerRequestUnlink,
+  getMarketplaceBlockReason,
+  isLinkedCustomer,
+} from "@/lib/customer-access";
 import { Link2, Shield, Info } from "lucide-react";
 
 const statusLabels = {
@@ -25,8 +29,9 @@ export function UnlinkRequestSection() {
     return null;
   }
 
-  const canSubmit =
-    customerLink.unlinkStatus === "none" || customerLink.unlinkStatus === "declined";
+  const canSubmit = canCustomerRequestUnlink(customerLink);
+  const trulyUnlinked =
+    customerLink.unlinkStatus === "approved" && !customerLink.linkedDesignerId;
 
   return (
     <section id="unlink" className="rounded-xl border border-[#d3c3ba]/20 bg-surface-container p-6 shadow-warm lg:p-8">
@@ -42,14 +47,16 @@ export function UnlinkRequestSection() {
               <p className="text-xs text-primary/60">Private designer–client connection</p>
             </div>
           </div>
-        ) : customerLink.unlinkStatus === "approved" ? (
+        ) : trulyUnlinked ? (
           <p className="text-sm text-primary/70">You are no longer linked to a designer.</p>
         ) : null}
 
         {!canAccessMarketplace && customerLink.unlinkStatus !== "none" && (
           <div className="rounded-lg bg-highlight/10 px-4 py-3">
             <p className="text-xs font-medium text-accent">
-              {statusLabels[customerLink.unlinkStatus]}
+              {customerLink.linkedDesignerId && customerLink.unlinkStatus === "approved"
+                ? "Previous unlink was approved, but your designer link is still active. Request again if you still want to leave."
+                : statusLabels[customerLink.unlinkStatus]}
             </p>
             {customerLink.unlinkReason && (
               <p className="mt-1 text-xs text-primary/60">Your reason: {customerLink.unlinkReason}</p>
@@ -64,7 +71,7 @@ export function UnlinkRequestSection() {
           </div>
         )}
 
-        {canSubmit && customerLink.linkedDesignerId && (
+        {canSubmit && (
           <>
             {!showForm ? (
               <Button variant="secondary" size="sm" onClick={() => setShowForm(true)}>
@@ -117,9 +124,7 @@ export function UnlinkRequestSection() {
           </>
         )}
 
-        {customerLink.unlinkStatus === "approved" && (
-          <Badge variant="gold">Marketplace access enabled</Badge>
-        )}
+        {trulyUnlinked && <Badge variant="gold">Marketplace access enabled</Badge>}
       </div>
     </section>
   );

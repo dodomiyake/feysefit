@@ -94,7 +94,7 @@ export async function createUnlinkRequest(input: {
     unlinkStatus: "pending",
     unlinkReason: input.reason,
     unlinkSubmittedAt: submittedAt,
-    activeUnlinkRequestId: data.legacy_id ?? data.id,
+    activeUnlinkRequestId: data.id,
   });
 
   return mapUnlinkRequest(data);
@@ -190,10 +190,41 @@ export async function updateUnlinkRequest(
   }
 
   const mapped = mapUnlinkRequest(data);
+  // Prefer DB uuid for profile.active_unlink_request_id (column is uuid).
+  const syncRequest = { ...mapped, id: existing.id };
+
+  // Admin approve goes through a privileged RPC that always deactivates the link.
+  if (patch.status === "approved") {
+    const { error: approveError } = await supabase.rpc("approve_customer_unlink", {
+      p_request_id: existing.id,
+    });
+    if (approveError) {
+      // Fallback for environments that have not run the SQL patch yet.
+      const currentLink = await import("@/lib/services/customerService").then((m) =>
+        m.getCustomerLinkState(existing.customer_id)
+      );
+      const next = syncCustomerLinkFromRequest(currentLink, syncRequest);
+      await patchCustomerLink(existing.customer_id, next);
+      // Force-clear the relationship even if profile patch partially applied earlier.
+      const { error: deactivateError } = await supabase.rpc("deactivate_customer_relationships", {
+        p_customer_id: existing.customer_id,
+      });
+      if (deactivateError) {
+        const { error: relationshipError } = await supabase
+          .from("designer_customer_relationships")
+          .update({ is_active: false })
+          .eq("customer_id", existing.customer_id)
+          .eq("is_active", true);
+        if (relationshipError) throw new Error(relationshipError.message);
+      }
+    }
+    return mapped;
+  }
+
   const currentLink = await import("@/lib/services/customerService").then((m) =>
     m.getCustomerLinkState(existing.customer_id)
   );
-  const next = syncCustomerLinkFromRequest(currentLink, mapped);
+  const next = syncCustomerLinkFromRequest(currentLink, syncRequest);
   await patchCustomerLink(existing.customer_id, next);
 
   return mapped;

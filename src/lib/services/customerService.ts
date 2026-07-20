@@ -164,10 +164,18 @@ export async function patchCustomerLink(
 
   if (patch.linkedDesignerId !== undefined) {
     if (patch.linkedDesignerId === null) {
-      await supabase
-        .from("designer_customer_relationships")
-        .update({ is_active: false })
-        .eq("customer_id", customer.id);
+      // Prefer SECURITY DEFINER RPC so RLS cannot leave a stale active link.
+      const { error: rpcError } = await supabase.rpc("deactivate_customer_relationships", {
+        p_customer_id: customer.id,
+      });
+      if (rpcError) {
+        const { error: relationshipError } = await supabase
+          .from("designer_customer_relationships")
+          .update({ is_active: false })
+          .eq("customer_id", customer.id)
+          .eq("is_active", true);
+        if (relationshipError) throw new Error(relationshipError.message);
+      }
     } else {
       const { resolveDesignerProfileId } = await import("@/lib/services/designerService");
       const designerId = await resolveDesignerProfileId(patch.linkedDesignerId);
@@ -186,7 +194,11 @@ export async function patchCustomerLink(
     }
   }
 
-  return getCustomerLinkState(customer.id);
+  const next = await getCustomerLinkState(customer.id);
+  if (patch.linkedDesignerId === null && next.linkedDesignerId) {
+    throw new Error("Could not clear the designer link. Ask admin to re-approve the unlink.");
+  }
+  return next;
 }
 
 export async function updateCustomerProfile(
