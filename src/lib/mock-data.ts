@@ -58,6 +58,8 @@ export interface Project {
   paymentMethod?: string;
   paymentNotes?: string;
   measurementRecordedBy?: MeasurementRecordedBy;
+  /** Garments / clothing items within this commission. */
+  items?: import("@/lib/project-items").ProjectItem[];
 }
 
 export interface Designer {

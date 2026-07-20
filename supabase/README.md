@@ -63,6 +63,7 @@ Then run:
 28. **Approve unlink clears designer link:** Run **`patch-approve-unlink-clear-link.sql`** so admin approve always deactivates `designer_customer_relationships`, heals clients stuck with `unlink_status = approved` while still linked, and adds safe RPCs / RLS for deactivating a link.
 29. **Marketplace client request link:** Run **`patch-marketplace-link-rpc.sql`** so clients can reliably link to a marketplace designer (and switch from a prior designer) when submitting a design request.
 30. **Designer create project for linked client:** Run **`patch-designer-project-create-rls.sql`** so project inserts work when a designer owns more than one profile UUID (avoids LIMIT 1 mismatch with `current_designer_profile_id()`).
+31. **Multi-garment projects:** Run **`patch-project-items.sql`** so a single project can contain multiple clothing items (each with its own status, deadline, fabric, and measurements). Existing projects are backfilled with one item from their legacy fields.
 
 ### Optional demo users (only if you run `seed.sql`)
 

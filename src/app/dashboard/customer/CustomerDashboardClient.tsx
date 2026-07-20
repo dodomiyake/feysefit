@@ -9,6 +9,7 @@ import { CustomerRecentUpdates } from "@/components/customer/CustomerRecentUpdat
 import { CustomerDesignerMessage } from "@/components/customer/CustomerDesignerMessage";
 import { CustomerDesignerPanel } from "@/components/customer/CustomerDesignerPanel";
 import { CustomerSpecifications } from "@/components/customer/CustomerSpecifications";
+import { CustomerProjectItemsPreview } from "@/components/customer/CustomerProjectItemsPreview";
 import { CustomerReferencesPreview } from "@/components/customer/CustomerReferencesPreview";
 import { MarketplaceLinkBanner } from "@/components/customer/MarketplaceLinkBanner";
 import { DirectCustomerHome } from "@/components/customer/DirectCustomerHome";
@@ -154,6 +155,8 @@ export default function CustomerDashboardClient() {
               key={`${activeProject.id}-${activeProject.status}`}
               projectId={activeProject.id}
             />
+
+            <CustomerProjectItemsPreview project={activeProject} />
 
             <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
               <div className="space-y-8 lg:col-span-8">

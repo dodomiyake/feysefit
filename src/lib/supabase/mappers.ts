@@ -6,6 +6,7 @@ import type { ProjectStatus, UserRole } from "@/lib/design-tokens";
 import { normalizeProjectStatus } from "@/lib/project-delivery";
 import type { MarketplaceApproval } from "@/lib/marketplace-approvals";
 import type { Customer, Designer, Message, PendingInvite, Project } from "@/lib/mock-data";
+import type { ProjectItem } from "@/lib/project-items";
 import type {
   DbCustomerProfile,
   DbCustomerReference,
@@ -15,6 +16,7 @@ import type {
   DbMeasurement,
   DbMessage,
   DbProject,
+  DbProjectItem,
   DbUnlinkRequest,
 } from "@/lib/types/database";
 
@@ -83,7 +85,8 @@ export function mapProject(
   row: DbProject,
   references: DbCustomerReference[] = [],
   designer?: Pick<DbDesignerProfile, "id" | "legacy_id" | "business_name" | "designer_name"> | null,
-  customer?: Pick<DbCustomerProfile, "id" | "legacy_id"> | null
+  customer?: Pick<DbCustomerProfile, "id" | "legacy_id"> | null,
+  items: ProjectItem[] = []
 ): Project {
   return {
     id: profileId(row),
@@ -137,6 +140,33 @@ export function mapProject(
     paymentMethod: row.payment_method?.trim() || undefined,
     paymentNotes: row.payment_notes?.trim() || undefined,
     measurementRecordedBy: row.measurement_recorded_by as Project["measurementRecordedBy"],
+    items: items.length ? items : undefined,
+  };
+}
+
+export function mapProjectItem(row: DbProjectItem, projectKey: string): ProjectItem {
+  return {
+    id: row.legacy_id ?? row.id,
+    projectId: projectKey,
+    sortOrder: row.sort_order,
+    title: row.title,
+    outfitType: row.outfit_type,
+    description: row.description?.trim() || undefined,
+    status: normalizeProjectStatus(row.status),
+    deadline: row.deadline,
+    price: row.price,
+    primaryFabric: row.primary_fabric?.trim() || undefined,
+    secondaryMaterial: row.secondary_material?.trim() || undefined,
+    lining: row.lining?.trim() || undefined,
+    referenceImages: Array.isArray(row.reference_images)
+      ? (row.reference_images as string[])
+      : [],
+    internalNotes: row.internal_notes?.trim() || undefined,
+    measurements: (row.measurements as Record<string, string> | null) ?? undefined,
+    measurementsRequired: row.measurements_required,
+    measurementNotes: row.measurement_notes?.trim() || undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 

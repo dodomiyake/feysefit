@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { legacyOrIdFilter } from "@/lib/legacy-id-lookup";
-import { mapProject } from "@/lib/supabase/mappers";
+import { mapProject, mapProjectItem } from "@/lib/supabase/mappers";
 import type { ProjectStatus } from "@/lib/design-tokens";
 import type { CustomerReference } from "@/lib/customer-references";
 import type { Project } from "@/lib/mock-data";
@@ -22,7 +22,9 @@ import {
 } from "@/lib/project-delivery";
 import { markProjectDelivered, redeliverProject } from "@/lib/services/deliveryService";
 
-import type { DbCustomerReference, DbProject } from "@/lib/types/database";
+import type { DbCustomerReference, DbProject, DbProjectItem } from "@/lib/types/database";
+import type { ProjectItemInput } from "@/lib/project-items";
+import { createProjectItems } from "@/lib/services/projectItemService";
 
 type DesignerMeta = {
   id: string;
@@ -66,12 +68,43 @@ async function fetchCustomerMetaByProfileIds(
   return new Map((data ?? []).map((row) => [row.id, row]));
 }
 
+async function fetchProjectItemsByUuids(
+  projects: DbProject[]
+): Promise<Map<string, import("@/lib/project-items").ProjectItem[]>> {
+  const map = new Map<string, import("@/lib/project-items").ProjectItem[]>();
+  if (!projects.length) return map;
+
+  const supabase = createClient();
+  const uuids = projects.map((p) => p.id);
+  const { data, error } = await supabase
+    .from("project_items")
+    .select("*")
+    .in("project_id", uuids)
+    .order("sort_order", { ascending: true });
+  if (error) {
+    // Table may not exist until SQL patch is applied.
+    if (/project_items|relation.*does not exist/i.test(error.message)) return map;
+    throw new Error(error.message);
+  }
+
+  const keyByUuid = new Map(projects.map((p) => [p.id, p.legacy_id ?? p.id]));
+  for (const row of data ?? []) {
+    const projectKey = keyByUuid.get(row.project_id) ?? row.project_id;
+    const item = mapProjectItem(row as DbProjectItem, projectKey);
+    const list = map.get(row.project_id) ?? [];
+    list.push(item);
+    map.set(row.project_id, list);
+  }
+  return map;
+}
+
 async function fetchProjectRows(): Promise<
   Array<{
     project: DbProject;
     references: DbCustomerReference[];
     designer: DesignerMeta | null;
     customer: CustomerMeta | null;
+    items: import("@/lib/project-items").ProjectItem[];
   }>
 > {
   const supabase = createClient();
@@ -102,11 +135,14 @@ async function fetchProjectRows(): Promise<
     .in("project_id", projectIds);
   if (referencesError) throw new Error(referencesError.message);
 
+  const itemsByProject = await fetchProjectItemsByUuids(projects ?? []);
+
   return (projects ?? []).map((project) => ({
     project,
     references: (references ?? []).filter((reference) => reference.project_id === project.id),
     designer: designerMeta.get(project.designer_id) ?? null,
     customer: project.customer_id ? customerMeta.get(project.customer_id) ?? null : null,
+    items: itemsByProject.get(project.id) ?? [],
   }));
 }
 
@@ -126,7 +162,10 @@ async function fetchProjectRow(projectId: string) {
     .eq("project_id", project.id);
   if (referencesError) throw new Error(referencesError.message);
 
-  return { project, references: references ?? [], designer: null, customer: null };
+  const itemsByProject = await fetchProjectItemsByUuids([project]);
+  const items = itemsByProject.get(project.id) ?? [];
+
+  return { project, references: references ?? [], designer: null, customer: null, items };
 }
 
 async function applyCustomerProjectDesignerUpdateRpc(
@@ -174,8 +213,8 @@ export async function applyMeasurementSubmissionToProject(
 
 export async function listProjects(): Promise<Project[]> {
   const rows = await fetchProjectRows();
-  return rows.map(({ project, references, designer, customer }) =>
-    mapProject(project, references, designer, customer)
+  return rows.map(({ project, references, designer, customer, items }) =>
+    mapProject(project, references, designer, customer, items)
   );
 }
 
@@ -195,7 +234,7 @@ export async function getProjectById(projectId: string): Promise<Project | null>
     customer = meta.get(row.project.customer_id) ?? null;
   }
 
-  return mapProject(row.project, row.references, designer, customer);
+  return mapProject(row.project, row.references, designer, customer, row.items);
 }
 
 export async function createProject(
@@ -214,6 +253,7 @@ export async function createProject(
     customerUpdate?: string;
     measurements?: Record<string, string>;
     measurementRecordedBy?: "customer" | "designer";
+    items?: ProjectItemInput[];
   },
   options?: {
     /** Marketplace enquiries are customer-authored; skip designer anti-poach preflight. */
@@ -310,7 +350,37 @@ export async function createProject(
     }
     throw new Error(error.message);
   }
-  return mapProject(data, []);
+
+  const projectKey = data.legacy_id ?? data.id;
+  const itemInputs: ProjectItemInput[] =
+    input.items?.length ?
+      input.items
+    : [
+        {
+          title: input.title,
+          outfitType: input.outfitType,
+          description: input.description,
+          deadline: input.deadline,
+          price: input.budget,
+          referenceImages: input.referenceImages ?? [],
+          internalNotes: input.internalNotes,
+          measurements: input.measurements,
+          measurementsRequired: Boolean(
+            input.measurements && Object.keys(input.measurements).length > 0
+          ),
+        },
+      ];
+
+  let items: import("@/lib/project-items").ProjectItem[] = [];
+  try {
+    items = await createProjectItems(projectKey, itemInputs);
+  } catch (itemError) {
+    if (!/project_items|relation.*does not exist/i.test(String(itemError))) {
+      throw itemError;
+    }
+  }
+
+  return mapProject(data, [], null, null, items);
 }
 
 export async function createProjectForStudioClient(
@@ -431,7 +501,7 @@ export async function updateProjectStatus(projectId: string, status: ProjectStat
     customer = meta.get(updated.project.customer_id) ?? null;
   }
 
-  return mapProject(updated.project, updated.references, designer, customer);
+  return mapProject(updated.project, updated.references, designer, customer, updated.items);
 }
 
 export async function appendProjectGalleryImage(projectId: string, imageUrl: string) {

@@ -286,6 +286,36 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["customer_references"]["Row"]>;
         Relationships: [];
       };
+      project_items: {
+        Row: {
+          id: string;
+          legacy_id: string | null;
+          project_id: string;
+          sort_order: number;
+          title: string;
+          outfit_type: string;
+          description: string;
+          status: string;
+          deadline: string;
+          price: string;
+          primary_fabric: string;
+          secondary_material: string;
+          lining: string;
+          reference_images: Json;
+          internal_notes: string;
+          measurements: Json | null;
+          measurements_required: boolean;
+          measurement_notes: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["project_items"]["Row"]> & {
+          project_id: string;
+          title: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["project_items"]["Row"]>;
+        Relationships: [];
+      };
       measurements: {
         Row: {
           id: string;
@@ -733,6 +763,7 @@ export type DbUser = Database["public"]["Tables"]["users"]["Row"];
 export type DbDesignerProfile = Database["public"]["Tables"]["designer_profiles"]["Row"];
 export type DbCustomerProfile = Database["public"]["Tables"]["customer_profiles"]["Row"];
 export type DbProject = Database["public"]["Tables"]["projects"]["Row"];
+export type DbProjectItem = Database["public"]["Tables"]["project_items"]["Row"];
 export type DbMessage = Database["public"]["Tables"]["messages"]["Row"];
 export type DbMeasurement = Database["public"]["Tables"]["measurements"]["Row"];
 export type DbInviteCode = Database["public"]["Tables"]["invite_codes"]["Row"];

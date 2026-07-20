@@ -17,6 +17,7 @@ import { ProjectCompletionPromptCard } from "@/components/projects/details/Proje
 import { ProjectDeliveryIssuePanel } from "@/components/projects/details/ProjectDeliveryIssuePanel";
 import { ProjectLocalOpsCards } from "@/components/projects/details/ProjectLocalOpsCards";
 import { ProjectLocalOpsSummary } from "@/components/projects/details/ProjectLocalOpsSummary";
+import { ProjectItemsCard } from "@/components/projects/details/ProjectItemsCard";
 import { hasVisibleLocalOps } from "@/lib/local-customer";
 import {
   hasProjectDescription,
@@ -69,6 +70,12 @@ export function ProjectDetailsContent({
         project={project}
         details={details}
         isDesigner={canManageProject}
+      />
+
+      <ProjectItemsCard
+        project={project}
+        isDesigner={canManageProject}
+        isCustomer={isCustomer}
       />
 
       {isCustomer && <ProjectDeliveryConfirmationCard project={project} />}

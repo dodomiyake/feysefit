@@ -10,12 +10,13 @@ import { ProjectLogisticsCard } from "@/components/projects/ProjectLogisticsCard
 import { ReferenceGallery } from "@/components/projects/ReferenceGallery";
 import {
   PROJECT_REFERENCE_IMAGES,
-  projectOutfitTypes,
 } from "@/lib/project-outfit-types";
 import { useApp } from "@/context/AppContext";
 import { isLocalDemoMode, isSupabaseEnabled } from "@/lib/config/backend";
 import { createProjectForDesignerLegacyId } from "@/lib/services/projectService";
 import { DEMO_DESIGNER_ID } from "@/lib/customer-access";
+import { createEmptyProjectItemDraft, type ProjectItemInput } from "@/lib/project-items";
+import { ProjectGarmentDraftList } from "@/components/projects/ProjectGarmentDraftList";
 import { cn } from "@/lib/cn";
 
 const selectClass =
@@ -28,6 +29,9 @@ export function CreateProjectForm() {
   const [references, setReferences] = useState<string[]>(() =>
     isLocalDemoMode() ? [...PROJECT_REFERENCE_IMAGES] : []
   );
+  const [garmentItems, setGarmentItems] = useState<ProjectItemInput[]>([
+    createEmptyProjectItemDraft(),
+  ]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -35,10 +39,25 @@ export function CreateProjectForm() {
     const title = String(form.get("title") ?? "");
     const customerId = String(form.get("customer") ?? "");
     const customer = customers.find((c) => c.id === customerId);
-    const outfitType = String(form.get("outfit") ?? "Bespoke");
+    const outfitType = String(garmentItems[0]?.outfitType ?? "Bespoke");
     const deadline = String(form.get("deadline") ?? "");
     const budget = String(form.get("budget") ?? "");
     const description = String(form.get("description") ?? "").trim();
+
+    const normalizedItems = garmentItems.map((item, index) => ({
+      ...item,
+      title: item.title.trim() || (index === 0 ? title : `Garment ${index + 1}`),
+      outfitType: item.outfitType || outfitType,
+      deadline: item.deadline || deadline,
+      price: item.price || budget,
+      description: item.description || (index === 0 ? description : item.description),
+      referenceImages: index === 0 ? references : item.referenceImages,
+    }));
+
+    if (normalizedItems.some((item) => !item.outfitType)) {
+      showToast("Each clothing item needs a type.", "error");
+      return;
+    }
 
     try {
       if (useSupabase) {
@@ -54,11 +73,12 @@ export function CreateProjectForm() {
           title,
           customerId,
           customerName: customer.name,
-          outfitType,
+          outfitType: normalizedItems[0]?.outfitType ?? outfitType,
           deadline,
           budget,
           description,
           referenceImages: references,
+          items: normalizedItems,
         });
         showToast("Project initialized successfully!");
         router.push(`/projects/${project.id}`);
@@ -94,8 +114,8 @@ export function CreateProjectForm() {
           Start a New Commission
         </h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted lg:text-base">
-          Define the vision, budget, and timeline for your next masterpiece. Our streamlined process
-          ensures every detail of the design intent is captured.
+          Define the vision for a multi-garment commission. Add each clothing item with its own
+          timeline, fabric notes, and production status.
         </p>
       </div>
 
@@ -114,59 +134,41 @@ export function CreateProjectForm() {
                   id="title"
                   name="title"
                   required
-                  placeholder="e.g., Midnight Velvet Gala Gown"
+                  placeholder="e.g., Wedding Outfits for Sandra"
                   className="signup-field w-full rounded-lg border px-4 py-4 text-primary placeholder:text-primary/40 outline-none focus:outline-none"
                 />
               </div>
 
-              <div className="grid gap-6 md:grid-cols-2">
-                <div className="space-y-2">
-                  <label htmlFor="customer" className="block text-sm font-medium text-ink-muted">
-                    Client
-                  </label>
-                  <div className="relative">
-                    <select
-                      id="customer"
-                      name="customer"
-                      required
-                      defaultValue=""
-                      onChange={handleCustomerChange}
-                      className={selectClass}
-                    >
-                      <option value="" disabled>
-                        Select a profile...
+              <div className="space-y-2">
+                <label htmlFor="customer" className="block text-sm font-medium text-ink-muted">
+                  Client
+                </label>
+                <div className="relative">
+                  <select
+                    id="customer"
+                    name="customer"
+                    required
+                    defaultValue=""
+                    onChange={handleCustomerChange}
+                    className={selectClass}
+                  >
+                    <option value="" disabled>
+                      Select a profile...
+                    </option>
+                    {customers.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
                       </option>
-                      {customers.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                      <option value="__add_new__">+ Add New Client</option>
-                    </select>
-                    <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted/60" />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label htmlFor="outfit" className="block text-sm font-medium text-ink-muted">
-                    Outfit Type
-                  </label>
-                  <div className="relative">
-                    <select id="outfit" name="outfit" required defaultValue="" className={selectClass}>
-                      {projectOutfitTypes.map((opt) => (
-                        <option key={opt.value || "empty"} value={opt.value} disabled={!opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted/60" />
-                  </div>
+                    ))}
+                    <option value="__add_new__">+ Add New Client</option>
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted/60" />
                 </div>
               </div>
 
               <div className="space-y-2">
                 <label htmlFor="description" className="block text-sm font-medium text-ink-muted">
-                  Creative Description
+                  Project overview (optional)
                 </label>
                 <textarea
                   id="description"
@@ -180,6 +182,13 @@ export function CreateProjectForm() {
                 />
               </div>
             </div>
+          </section>
+
+          <section className="rounded-xl border border-[#d3c3ba]/20 bg-surface-container p-6 shadow-warm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md lg:p-8">
+            <ProjectGarmentDraftList
+              items={garmentItems}
+              onChange={setGarmentItems}
+            />
           </section>
 
           <ReferenceGallery
