@@ -236,6 +236,9 @@ export async function updateMarketplaceListing(
 
   if (patch.status === "approved") {
     await setDesignerMarketplaceLive(existing.designer_id, true);
+  } else if (patch.status === "declined") {
+    // Revoking/declining approval must immediately remove an existing listing.
+    await setDesignerMarketplaceLive(existing.designer_id, false);
   }
 
   return { ...mapMarketplaceListing(data), designerId: data.designer_id };

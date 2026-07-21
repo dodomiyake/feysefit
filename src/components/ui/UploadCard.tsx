@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import Image from "next/image";
-import { Upload, ImageIcon } from "lucide-react";
+import { Upload, ImageIcon, X } from "lucide-react";
 import { useResolvedStorageUrl } from "@/hooks/useResolvedStorageUrl";
 
 interface UploadCardProps {
@@ -11,6 +11,8 @@ interface UploadCardProps {
   previewUrls?: string[];
   multiple?: boolean;
   onFilesSelected?: (files: File[]) => void;
+  /** When provided, thumbnails show a remove button. */
+  onRemoveAt?: (index: number) => void;
   onClick?: () => void;
 }
 
@@ -20,6 +22,7 @@ export function UploadCard({
   previewUrls = [],
   multiple = false,
   onFilesSelected,
+  onRemoveAt,
   onClick,
 }: UploadCardProps) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -37,7 +40,7 @@ export function UploadCard({
       <input
         ref={inputRef}
         type="file"
-        accept="image/jpeg,image/png,image/webp"
+        accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif"
         multiple={multiple}
         className="hidden"
         onChange={(event) => {
@@ -59,8 +62,12 @@ export function UploadCard({
       </button>
       {previewUrls.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {previewUrls.map((url) => (
-            <UploadPreviewThumb key={url} url={url} />
+          {previewUrls.map((url, index) => (
+            <UploadPreviewThumb
+              key={url}
+              url={url}
+              onRemove={onRemoveAt ? () => onRemoveAt(index) : undefined}
+            />
           ))}
         </div>
       )}
@@ -68,12 +75,22 @@ export function UploadCard({
   );
 }
 
-function UploadPreviewThumb({ url }: { url: string }) {
+function UploadPreviewThumb({ url, onRemove }: { url: string; onRemove?: () => void }) {
   const resolvedSrc = useResolvedStorageUrl(url);
   return (
     <div className="relative aspect-[4/5] overflow-hidden rounded-lg bg-card">
       {resolvedSrc ? (
         <Image src={resolvedSrc} alt="" fill className="object-cover" unoptimized />
+      ) : null}
+      {onRemove ? (
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label="Remove image"
+          className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white shadow transition-colors hover:bg-black/80"
+        >
+          <X className="h-4 w-4" />
+        </button>
       ) : null}
     </div>
   );

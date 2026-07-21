@@ -23,10 +23,18 @@ import {
   updateDesignerProfile,
 } from "@/lib/services/designerService";
 import {
+  updateUserOnboardingState,
+} from "@/lib/services/onboardingService";
+import {
+  isDesignerProfileMarketplaceReady,
+} from "@/lib/onboarding";
+import {
   uploadAvatarImage,
   uploadDesignerCoverImage,
   uploadDesignerPortfolioImage,
+  validateImageFile,
 } from "@/lib/services/storageService";
+import Link from "next/link";
 import {
   ArrowRight,
   ImagePlus,
@@ -42,8 +50,22 @@ const MAX_PORTFOLIO_IMAGES = 6;
 const CONTINUE_LABELS = [
   "Continue to Contact",
   "Continue to Portfolio",
-  "Continue to Marketplace",
-  "Complete Setup",
+  "Continue to Review",
+  "Accept & Finish",
+];
+
+const SERVICE_AREA_OPTIONS = [
+  "Local fittings",
+  "Nationwide delivery",
+  "International shipping",
+  "Virtual consultations",
+];
+
+const DELIVERY_OPTIONS = [
+  { value: "in_person", label: "In-person appointments" },
+  { value: "pickup", label: "Studio pickup" },
+  { value: "courier", label: "Courier delivery" },
+  { value: "virtual", label: "Virtual / remote" },
 ];
 
 const CATEGORY_OPTIONS = [
@@ -98,19 +120,33 @@ export default function DesignerOnboardingPage() {
   const [location, setLocation] = useState("");
   const [yearsExperience, setYearsExperience] = useState("");
   const [bio, setBio] = useState("");
+  const [phone, setPhone] = useState("");
+  const [serviceAreas, setServiceAreas] = useState<string[]>(["Local fittings"]);
+  const [deliveryModes, setDeliveryModes] = useState<string[]>(["in_person"]);
+  const [acceptTerms, setAcceptTerms] = useState(false);
 
   const [coverImage, setCoverImage] = useState<PendingImage | null>(null);
   const [avatarImage, setAvatarImage] = useState<PendingImage | null>(null);
   const [portfolioImages, setPortfolioImages] = useState<PendingImage[]>([]);
 
-  const setCoverImageSafe = (file: File) => {
+  const setCoverImageSafe = async (file: File) => {
+    const problem = await validateImageFile(file);
+    if (problem) {
+      showToast(problem, "error");
+      return;
+    }
     setCoverImage((prev) => {
       if (prev) URL.revokeObjectURL(prev.previewUrl);
       return createPendingImage(file);
     });
   };
 
-  const setAvatarImageSafe = (file: File) => {
+  const setAvatarImageSafe = async (file: File) => {
+    const problem = await validateImageFile(file);
+    if (problem) {
+      showToast(problem, "error");
+      return;
+    }
     setAvatarImage((prev) => {
       if (prev) URL.revokeObjectURL(prev.previewUrl);
       return createPendingImage(file);
@@ -118,6 +154,10 @@ export default function DesignerOnboardingPage() {
   };
 
   const finishSetup = async () => {
+    if (!acceptTerms) {
+      showToast("Please accept the platform terms to continue.", "error");
+      return;
+    }
     if (useSupabase && !designerId) {
       showToast("Designer profile not found. Please sign in again.", "error");
       return;
@@ -135,7 +175,12 @@ export default function DesignerOnboardingPage() {
           profileUrl = await uploadAvatarImage(authUser.id, avatarImage.file);
         }
 
-        const bioParts = [tagline.trim(), bio.trim()].filter(Boolean);
+        const bioParts = [
+          tagline.trim(),
+          bio.trim(),
+          phone.trim() ? `Contact: ${phone.trim()}` : "",
+          serviceAreas.length ? `Service areas: ${serviceAreas.join(", ")}` : "",
+        ].filter(Boolean);
         const parsedYears = yearsExperience.trim()
           ? Number.parseInt(yearsExperience, 10)
           : null;
@@ -148,26 +193,83 @@ export default function DesignerOnboardingPage() {
           coverImage: coverUrl,
           profileImage: profileUrl,
           yearsExperience: Number.isFinite(parsedYears) ? parsedYears : null,
+          offersInPerson: deliveryModes.includes("in_person"),
+          offeredMeetingModes: deliveryModes,
         });
 
+        let portfolioCount = 0;
+        let failedUploads = 0;
         if (portfolioImages.length) {
-          const portfolioUrls = await Promise.all(
+          // Upload what we can; a single bad file must not strand the user on the last step.
+          const results = await Promise.allSettled(
             portfolioImages.map((image) =>
               uploadDesignerPortfolioImage(authUser.id, image.file)
             )
           );
-          await replacePortfolioImages(designerId, portfolioUrls);
+          const portfolioUrls = results
+            .filter(
+              (result): result is PromiseFulfilledResult<string> =>
+                result.status === "fulfilled"
+            )
+            .map((result) => result.value);
+          failedUploads = results.length - portfolioUrls.length;
+          if (portfolioUrls.length) {
+            await replacePortfolioImages(designerId, portfolioUrls);
+          }
+          portfolioCount = portfolioUrls.length;
+          if (failedUploads > 0) {
+            const firstError = results.find(
+              (result): result is PromiseRejectedResult => result.status === "rejected"
+            );
+            const reason =
+              firstError?.reason instanceof Error ? firstError.reason.message : "";
+            showToast(
+              `${failedUploads} portfolio image(s) could not be uploaded${reason ? `: ${reason}` : ""}. You can re-upload them from your checklist.`,
+              "error"
+            );
+          }
         }
 
+        await updateUserOnboardingState(authUser.id, {
+          path: "designer",
+          step: "checklist",
+          acceptTerms: true,
+          complete: true,
+          setupChecklist: {
+            portfolioUploaded: portfolioCount > 0,
+            servicesAdded: deliveryModes.length > 0 && serviceAreas.length > 0,
+          },
+        });
+
         await refreshAppData();
+
+        const marketplaceReady = isDesignerProfileMarketplaceReady({
+          businessName: businessName.trim(),
+          location: location.trim(),
+          specialty: category ? specialtyLabel(category) : "",
+          portfolioCount,
+        });
+
+        if (
+          designerId &&
+          marketplaceVisible &&
+          marketplaceReady &&
+          !isDesignerMarketplaceLive(designerId)
+        ) {
+          setDesignerMarketplaceVisibility(designerId, true);
+          showToast("Profile submitted for marketplace review.");
+        } else if (marketplaceVisible && !marketplaceReady) {
+          showToast(
+            "Profile saved. Marketplace stays hidden until portfolio and details are complete."
+          );
+        } else {
+          showToast("Profile setup complete!");
+        }
+      } else {
+        showToast("Profile setup complete!");
       }
 
-      if (designerId && marketplaceVisible && !isDesignerMarketplaceLive(designerId)) {
-        setDesignerMarketplaceVisibility(designerId, true);
-      }
-
-      showToast("Profile setup complete!");
-      router.push("/dashboard/designer");
+      router.push("/onboarding/designer/checklist");
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Could not save profile", "error");
     } finally {
@@ -176,8 +278,23 @@ export default function DesignerOnboardingPage() {
   };
 
   const next = () => {
+    if (step === 0 && !businessName.trim()) {
+      showToast("Enter your brand or studio name.", "error");
+      return;
+    }
+    if (step === 1 && !location.trim()) {
+      showToast("Enter your location.", "error");
+      return;
+    }
     if (step < TOTAL_STEPS - 1) {
       setStep(step + 1);
+      if (useSupabase && authUser?.id) {
+        void updateUserOnboardingState(authUser.id, {
+          status: "in_progress",
+          path: "designer",
+          step: String(step + 1),
+        });
+      }
       return;
     }
     void finishSetup();
@@ -187,16 +304,34 @@ export default function DesignerOnboardingPage() {
     if (step > 0) setStep(step - 1);
   };
 
-  const addPortfolioFiles = (files: File[]) => {
+  const addPortfolioFiles = async (files: File[]) => {
     const remaining = MAX_PORTFOLIO_IMAGES - portfolioImages.length;
     if (remaining <= 0) {
       showToast(`Maximum ${MAX_PORTFOLIO_IMAGES} portfolio images`, "error");
       return;
     }
+    const accepted: File[] = [];
+    for (const file of files) {
+      const problem = await validateImageFile(file);
+      if (problem) {
+        showToast(problem, "error");
+        continue;
+      }
+      accepted.push(file);
+    }
+    if (!accepted.length) return;
     setPortfolioImages((current) => [
       ...current,
-      ...files.slice(0, remaining).map(createPendingImage),
+      ...accepted.slice(0, remaining).map(createPendingImage),
     ]);
+  };
+
+  const removePortfolioImage = (index: number) => {
+    setPortfolioImages((current) => {
+      const removed = current[index];
+      if (removed) URL.revokeObjectURL(removed.previewUrl);
+      return current.filter((_, i) => i !== index);
+    });
   };
 
   return (
@@ -211,7 +346,17 @@ export default function DesignerOnboardingPage() {
         <DesignerOnboardingHeader
           step={step}
           totalSteps={TOTAL_STEPS}
-          onSaveDraft={() => showToast("Draft saved")}
+          onSaveDraft={() => {
+            if (useSupabase && authUser?.id) {
+              void updateUserOnboardingState(authUser.id, {
+                status: "in_progress",
+                path: "designer",
+                step: String(step),
+              }).then(() => showToast("Progress saved — you can resume later"));
+              return;
+            }
+            showToast("Progress saved — you can resume later");
+          }}
         />
 
         <main className="min-h-screen xl:pr-[30%]">
@@ -350,10 +495,10 @@ export default function DesignerOnboardingPage() {
               <section className="space-y-8">
                 <div className="space-y-2">
                   <h1 className="font-headline text-[2rem] font-semibold leading-10 text-primary">
-                    Contact &amp; Story
+                    Contact, Services &amp; Delivery
                   </h1>
                   <p className="text-base text-ink-muted">
-                    Share how clients can reach you and the story behind your craft.
+                    Share how clients can reach you, where you work, and how you deliver.
                   </p>
                 </div>
                 <div className="grid gap-6 sm:grid-cols-2">
@@ -386,14 +531,16 @@ export default function DesignerOnboardingPage() {
                     value={yearsExperience}
                     onChange={(e) => setYearsExperience(e.target.value)}
                   />
+                  <Input
+                    label="Phone / Contact"
+                    id="phone"
+                    type="tel"
+                    placeholder="+234 xxx xxx xxxx"
+                    className="signup-field"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                  />
                 </div>
-                <Input
-                  label="Phone / Contact"
-                  id="phone"
-                  type="tel"
-                  placeholder="+234 xxx xxx xxxx"
-                  className="signup-field"
-                />
                 <TextArea
                   label="Bio"
                   id="bio"
@@ -402,6 +549,66 @@ export default function DesignerOnboardingPage() {
                   value={bio}
                   onChange={(e) => setBio(e.target.value)}
                 />
+                <div className="space-y-3">
+                  <p className="text-sm font-medium text-primary">Service areas</p>
+                  <div className="flex flex-wrap gap-2">
+                    {SERVICE_AREA_OPTIONS.map((area) => {
+                      const active = serviceAreas.includes(area);
+                      return (
+                        <button
+                          key={area}
+                          type="button"
+                          onClick={() =>
+                            setServiceAreas((prev) =>
+                              active ? prev.filter((item) => item !== area) : [...prev, area]
+                            )
+                          }
+                          className={cn(
+                            "rounded-full border px-4 py-2 text-sm transition-colors",
+                            active
+                              ? "border-accent bg-accent/15 text-primary"
+                              : "border-primary/15 text-primary/70 hover:bg-surface"
+                          )}
+                        >
+                          {area}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <p className="text-sm font-medium text-primary">Delivery &amp; appointment options</p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {DELIVERY_OPTIONS.map((option) => {
+                      const active = deliveryModes.includes(option.value);
+                      return (
+                        <label
+                          key={option.value}
+                          className={cn(
+                            "flex cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 text-sm",
+                            active ? "border-accent bg-accent/10" : "border-primary/10"
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={active}
+                            onChange={() =>
+                              setDeliveryModes((prev) =>
+                                active
+                                  ? prev.filter((item) => item !== option.value)
+                                  : [...prev, option.value]
+                              )
+                            }
+                          />
+                          {option.label}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-ink-muted">
+                    You can fine-tune appointment availability from Settings after setup.
+                  </p>
+                </div>
               </section>
             )}
 
@@ -418,10 +625,11 @@ export default function DesignerOnboardingPage() {
                 </div>
                 <UploadCard
                   label="Portfolio images"
-                  description={`Upload your best work (up to ${MAX_PORTFOLIO_IMAGES} images)`}
+                  description={`Upload your best work (up to ${MAX_PORTFOLIO_IMAGES} images, JPG / PNG / WebP / GIF, max 5MB each)`}
                   multiple
                   previewUrls={portfolioImages.map((image) => image.previewUrl)}
                   onFilesSelected={addPortfolioFiles}
+                  onRemoveAt={removePortfolioImage}
                 />
                 <p className="text-xs text-ink-muted">
                   High-quality imagery helps clients understand your aesthetic before they reach
@@ -434,10 +642,11 @@ export default function DesignerOnboardingPage() {
               <section className="space-y-8">
                 <div className="space-y-2">
                   <h1 className="font-headline text-[2rem] font-semibold leading-10 text-primary">
-                    Marketplace Profile
+                    Review &amp; Accept Terms
                   </h1>
                   <p className="text-base text-ink-muted">
-                    Review how your profile will appear to clients on the marketplace.
+                    Confirm how your profile will appear, then accept the platform terms to finish
+                    onboarding.
                   </p>
                 </div>
                 <div className="rounded-xl border border-[#d3c3ba]/30 bg-card p-6 space-y-4">
@@ -460,7 +669,7 @@ export default function DesignerOnboardingPage() {
                       </p>
                       <p className="text-sm text-ink-muted">
                         {marketplaceVisible
-                          ? "Visible on marketplace after admin approval"
+                          ? "Marketplace listing stays pending until your profile is complete and reviewed"
                           : "Private — invite-only clients"}
                       </p>
                     </div>
@@ -468,13 +677,33 @@ export default function DesignerOnboardingPage() {
                   <div className="flex items-center justify-between rounded-lg bg-background/60 px-4 py-3">
                     <span className="text-sm text-ink-muted">Marketplace visibility</span>
                     <span className="text-sm font-semibold text-primary">
-                      {marketplaceVisible ? "Enabled" : "Disabled"}
+                      {marketplaceVisible ? "Request review after complete" : "Disabled"}
                     </span>
                   </div>
                   <p className="text-xs text-ink-muted">
-                    You can change visibility anytime from Settings after setup.
+                    Incomplete profiles stay hidden from the marketplace. You can finish portfolio
+                    and services on the next checklist screen.
                   </p>
                 </div>
+                <label className="flex items-start gap-3 rounded-xl border border-primary/10 bg-surface px-4 py-4 text-sm text-primary">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={acceptTerms}
+                    onChange={(e) => setAcceptTerms(e.target.checked)}
+                  />
+                  <span>
+                    I accept the FeyseFit{" "}
+                    <Link href="/terms" className="font-medium text-accent underline">
+                      Terms of Service
+                    </Link>{" "}
+                    and{" "}
+                    <Link href="/privacy" className="font-medium text-accent underline">
+                      Privacy Policy
+                    </Link>
+                    .
+                  </span>
+                </label>
               </section>
             )}
 

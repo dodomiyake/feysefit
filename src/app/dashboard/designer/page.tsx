@@ -10,6 +10,7 @@ import { ProjectPipeline } from "@/components/designer/ProjectPipeline";
 import { RecentCustomersPanel } from "@/components/designer/RecentCustomersPanel";
 import { ArtisanFocusCard } from "@/components/designer/ArtisanFocusCard";
 import { DesignerUnlinkConfirmations } from "@/components/designer/DesignerUnlinkConfirmations";
+import { DesignerSetupChecklistCard } from "@/components/designer/DesignerSetupChecklistCard";
 import { NewProjectButton } from "@/components/ui/NewProjectButton";
 import { MfaEncouragementBanner } from "@/components/auth/MfaEncouragementBanner";
 import { useApp } from "@/context/AppContext";
@@ -28,6 +29,8 @@ export default function DesignerDashboardPage() {
     <DesignerShell>
       <div className="mx-auto max-w-7xl flex-1 px-5 pb-10 pt-6 lg:px-16 lg:pb-12">
         <MfaEncouragementBanner />
+
+        <DesignerSetupChecklistCard />
 
         <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>

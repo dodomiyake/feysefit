@@ -48,10 +48,25 @@ export async function getDesignerById(designerId: string): Promise<Designer | nu
 
 export async function listLiveMarketplaceDesignerIds(): Promise<string[]> {
   const supabase = createClient();
+  // A boolean flag alone is not sufficient: only an admin-approved listing may
+  // make a designer discoverable. This also protects deployments that have not
+  // yet applied the database trigger hardening patch.
+  const { data: approvedListings, error: approvalError } = await supabase
+    .from("marketplace_listings")
+    .select("designer_id")
+    .eq("status", "approved");
+  if (approvalError) throw new Error(approvalError.message);
+
+  const approvedDesignerIds = Array.from(
+    new Set((approvedListings ?? []).map((listing) => listing.designer_id))
+  );
+  if (!approvedDesignerIds.length) return [];
+
   const { data, error } = await supabase
     .from("designer_profiles")
     .select("id, legacy_id")
-    .eq("marketplace_live", true);
+    .eq("marketplace_live", true)
+    .in("id", approvedDesignerIds);
   if (error) throw new Error(error.message);
   return (data ?? []).map((row) => row.legacy_id ?? row.id);
 }
@@ -92,6 +107,7 @@ export async function updateDesignerProfile(
     priceRangeMin?: number | null;
     priceRangeMax?: number | null;
     yearsExperience?: number | null;
+    offeredMeetingModes?: string[];
   }
 ) {
   const supabase = createClient();
@@ -114,6 +130,9 @@ export async function updateDesignerProfile(
       ...(patch.priceRangeMin !== undefined ? { price_range_min: patch.priceRangeMin } : {}),
       ...(patch.priceRangeMax !== undefined ? { price_range_max: patch.priceRangeMax } : {}),
       ...(patch.yearsExperience !== undefined ? { years_experience: patch.yearsExperience } : {}),
+      ...(patch.offeredMeetingModes !== undefined
+        ? { offered_meeting_modes: patch.offeredMeetingModes }
+        : {}),
       updated_at: new Date().toISOString(),
     })
     .eq("id", designerId)

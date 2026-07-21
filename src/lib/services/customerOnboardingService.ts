@@ -14,6 +14,7 @@ import {
   resolveLocalInviteDesignerId,
 } from "@/lib/services/inviteService";
 import { saveMeasurementProfile } from "@/lib/services/measurementService";
+import { updateUserOnboardingState } from "@/lib/services/onboardingService";
 
 export interface CompleteCustomerOnboardingInput {
   userId: string;
@@ -22,9 +23,10 @@ export interface CompleteCustomerOnboardingInput {
   location: string;
   phone?: string;
   styleNotes?: string;
-  measurementUnit: "inches" | "cm";
+  measurementUnit?: "inches" | "cm";
   inviteCode?: string;
   mode: "invite" | "direct";
+  acceptTerms?: boolean;
 }
 
 export interface CompleteCustomerOnboardingResult {
@@ -84,14 +86,24 @@ export async function completeCustomerOnboarding(
     });
 
     if (useSupabase) {
+      // Draft preference only — full body measurements are requested later by a project/designer.
       await saveMeasurementProfile(
         input.customerId,
-        { unit: input.measurementUnit, status: "draft" },
+        {
+          unit: input.measurementUnit ?? "inches",
+          status: "draft",
+        },
         trimmedName
       );
+      await updateUserOnboardingState(input.userId, {
+        path: input.mode === "direct" ? "customer_direct" : "customer_invite",
+        acceptTerms: input.acceptTerms !== false,
+        complete: true,
+        step: "done",
+      });
     } else {
       await api.measurements.save(input.customerId, {
-        unit: input.measurementUnit,
+        unit: input.measurementUnit ?? "inches",
         status: "draft",
       });
     }

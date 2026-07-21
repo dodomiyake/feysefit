@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
@@ -42,7 +42,7 @@ interface SignUpContentProps {
 export default function SignUpContent({ role }: SignUpContentProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { setRole, showToast, login } = useApp();
+  const { setRole, showToast, completeSignupSession } = useApp();
   const inviteParam = searchParams.get("invite") ?? searchParams.get("code");
   const inviteKey = inviteParam ?? "";
   const accountBackHref = role === "designer" ? "/account/designer" : "/account/client";
@@ -63,8 +63,19 @@ export default function SignUpContent({ role }: SignUpContentProps) {
   const [prevInviteKey, setPrevInviteKey] = useState(inviteKey);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const submittingRef = useRef(false);
   const useSupabase = isSupabaseEnabled();
   const abuse = useAuthAbuseGuard("signup", email);
+  const lastCaptchaStatus = useRef(abuse.captchaStatus);
+
+  // Clear stale form errors once Turnstile issues a fresh Success token.
+  if (lastCaptchaStatus.current !== abuse.captchaStatus) {
+    const wasSolved = lastCaptchaStatus.current === "solved";
+    lastCaptchaStatus.current = abuse.captchaStatus;
+    if (!wasSolved && abuse.captchaStatus === "solved" && formError) {
+      setFormError(null);
+    }
+  }
 
   if (inviteKey !== prevInviteKey) {
     setPrevInviteKey(inviteKey);
@@ -82,6 +93,7 @@ export default function SignUpContent({ role }: SignUpContentProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submittingRef.current) return;
     if (!termsAccepted) {
       setTermsError(true);
       showToast("Please accept the Terms of Service and Privacy Policy");
@@ -105,6 +117,16 @@ export default function SignUpContent({ role }: SignUpContentProps) {
     }
     setTermsError(false);
     setFormError(null);
+
+    // Consume the token immediately so "Success!" cannot outlive a single-use token.
+    const captchaToken = abuse.showCaptcha ? abuse.consumeCaptchaToken() : null;
+    if (abuse.showCaptcha && !captchaToken) {
+      setFormError("Complete the security check to prove you are human, then try again.");
+      showToast("Complete the security check first.", "error");
+      return;
+    }
+
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       if (useSupabase) {
@@ -118,18 +140,21 @@ export default function SignUpContent({ role }: SignUpContentProps) {
             role === "customer" && customerPath === "invite"
               ? normalizeInviteCode(inviteCode)
               : undefined,
-          captchaToken: abuse.captchaToken,
+          captchaToken,
         });
-        abuse.onSuccess();
-        logSecurityEvent({ eventType: "signup_succeeded", email, meta: { role } });
 
         if (result.needsEmailConfirmation) {
+          abuse.onSuccess();
+          logSecurityEvent({ eventType: "signup_succeeded", email, meta: { role } });
           showToast("Account created! Check your email to verify your account.");
           router.push(`/verify-email?email=${encodeURIComponent(result.email)}`);
           return;
         }
 
-        await login(email, password, { captchaToken: abuse.captchaToken });
+        // Signup already created a session — hydrate the app without a second captcha login.
+        await completeSignupSession(result.user);
+        abuse.onSuccess();
+        logSecurityEvent({ eventType: "signup_succeeded", email, meta: { role } });
         showToast("Account created successfully!");
       } else {
         setRole(role);
@@ -153,6 +178,7 @@ export default function SignUpContent({ role }: SignUpContentProps) {
       setFormError(message);
       showToast(message, "error");
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -332,7 +358,10 @@ export default function SignUpContent({ role }: SignUpContentProps) {
                 <Button
                   type="submit"
                   disabled={
-                    submitting || abuse.snapshot.limited || (abuse.showCaptcha && !abuse.captchaSolved)
+                    submitting ||
+                    abuse.snapshot.limited ||
+                    (abuse.showCaptcha &&
+                      (abuse.captchaStatus !== "solved" || !abuse.captchaSolved))
                   }
                   className="h-12 w-full text-base shadow-lg hover:shadow-xl"
                   size="lg"

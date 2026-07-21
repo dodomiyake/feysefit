@@ -10,6 +10,8 @@ import { LoginPageShell, LoginPortalLink } from "@/components/auth/LoginPageShel
 import { CaptchaSlot } from "@/components/auth/CaptchaSlot";
 import { useApp } from "@/context/AppContext";
 import { resolveSafeNextPath } from "@/lib/auth-routes";
+import { postAuthDestination } from "@/lib/onboarding";
+import { getUserOnboardingState } from "@/lib/services/onboardingService";
 import { isApiEnabled, isDemoAuthAllowed, isSupabaseEnabled } from "@/lib/config/backend";
 import { DEMO_CREDENTIALS } from "@/lib/demo-auth";
 import { resolvePostLoginMfaPath } from "@/lib/services/mfaService";
@@ -32,6 +34,29 @@ const DASHBOARD_ROUTES = {
   designer: "/dashboard/designer",
   customer: "/dashboard/customer",
 };
+
+async function resolveMemberDestination(
+  role: "designer" | "customer",
+  preferredNext: string | null,
+  useSupabase: boolean,
+  userId?: string
+) {
+  if (!useSupabase || !userId) {
+    return preferredNext ?? DASHBOARD_ROUTES[role];
+  }
+  try {
+    const onboarding = await getUserOnboardingState(userId);
+    return postAuthDestination({
+      role,
+      onboardingStatus: onboarding.status,
+      onboardingPath: onboarding.path,
+      onboardingStep: onboarding.step,
+      preferredNext,
+    });
+  } catch {
+    return preferredNext ?? DASHBOARD_ROUTES[role];
+  }
+}
 
 function LoginPageContent() {
   const router = useRouter();
@@ -71,9 +96,8 @@ function LoginPageContent() {
     }
   }, [searchParams, showToast]);
 
-  const postLoginHref = (role: "designer" | "customer") => {
-    if (nextPath) return nextPath;
-    return DASHBOARD_ROUTES[role];
+  const postLoginHref = async (role: "designer" | "customer", userId?: string) => {
+    return resolveMemberDestination(role, nextPath, useSupabase, userId);
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -91,9 +115,14 @@ function LoginPageContent() {
     setSubmitting(true);
     try {
       if (useRemote) {
+        const captchaToken = abuse.showCaptcha ? abuse.consumeCaptchaToken() : abuse.captchaToken;
+        if (abuse.showCaptcha && !captchaToken) {
+          showToast("Complete the security check first.", "error");
+          return;
+        }
         const user = await login(email, password, {
           rememberMe,
-          captchaToken: abuse.captchaToken,
+          captchaToken,
         });
         abuse.onSuccess();
         logSecurityEvent({ eventType: "login_succeeded", email, meta: { portal: "member" } });
@@ -106,7 +135,10 @@ function LoginPageContent() {
           showToast(`This account is registered as a ${user.role}. Switch to the ${user.role} tab or use the correct portal.`, "error");
           return;
         }
-        const destination = postLoginHref(user.role as "designer" | "customer");
+        const destination = await postLoginHref(
+          user.role as "designer" | "customer",
+          user.id
+        );
         if (useSupabase) {
           const mfaPath = await resolvePostLoginMfaPath(
             user.role as "designer" | "customer",
@@ -126,7 +158,7 @@ function LoginPageContent() {
       if (loginRole === "customer") initDemoCustomer(true);
       syncProjects();
       showToast("Welcome back!");
-      router.push(postLoginHref(loginRole));
+      router.push(await postLoginHref(loginRole));
     } catch (error) {
       const next = abuse.onFailure();
       logSecurityEvent({

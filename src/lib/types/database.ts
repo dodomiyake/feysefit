@@ -12,6 +12,12 @@ export interface Database {
           account_status: "active" | "suspended" | "banned";
           profile_image: string;
           password_changed_at: string | null;
+          onboarding_status: string;
+          onboarding_step: string;
+          onboarding_path: string;
+          terms_accepted_at: string | null;
+          onboarding_completed_at: string | null;
+          setup_checklist: Json;
           created_at: string;
           updated_at: string;
         };

@@ -40,6 +40,7 @@ export function CustomerOnboardingContent({ mode = "invite" }: CustomerOnboardin
     inviteParam ? normalizeInviteCode(inviteParam) : ""
   );
   const [styleNotes, setStyleNotes] = useState("");
+  const [acceptTerms, setAcceptTerms] = useState(false);
   const [prevAuthName, setPrevAuthName] = useState(authUser?.name ?? "");
   const inviteKey = inviteParam ?? "";
   const [prevInviteKey, setPrevInviteKey] = useState(inviteKey);
@@ -71,6 +72,11 @@ export function CustomerOnboardingContent({ mode = "invite" }: CustomerOnboardin
       return;
     }
 
+    if (!acceptTerms) {
+      showToast("Please accept the platform terms to continue.", "error");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -85,6 +91,7 @@ export function CustomerOnboardingContent({ mode = "invite" }: CustomerOnboardin
           measurementUnit,
           inviteCode: trimmedInvite || undefined,
           mode,
+          acceptTerms: true,
         });
 
         setMeasurementUnit(measurementUnit);
@@ -92,12 +99,13 @@ export function CustomerOnboardingContent({ mode = "invite" }: CustomerOnboardin
 
         if (result.linkedToDesigner) {
           showToast("Welcome to FeyseFit! You're linked to your designer.");
+          // Active project / measurements come later when the designer starts a commission.
           router.push("/dashboard/customer");
           return;
         }
 
         initDirectCustomer();
-        showToast("Welcome to FeyseFit! Browse designers on the marketplace.");
+        showToast("Welcome to FeyseFit! Browse designers or enter an invite code anytime.");
         router.push("/marketplace");
         return;
       }
@@ -224,7 +232,14 @@ export function CustomerOnboardingContent({ mode = "invite" }: CustomerOnboardin
               </div>
 
               <div className="space-y-3">
-                <p className="text-sm font-medium text-primary">Preferred Measurement Unit</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-primary">Preferred Measurement Unit</p>
+                  <span className="text-xs font-semibold text-ink-muted">Optional for now</span>
+                </div>
+                <p className="text-xs text-ink-muted">
+                  Full body measurements are only requested when you have an active project with a
+                  designer.
+                </p>
                 <div className="flex gap-6">
                   {(["inches", "cm"] as const).map((unit) => (
                     <button
@@ -286,6 +301,25 @@ export function CustomerOnboardingContent({ mode = "invite" }: CustomerOnboardin
               </div>
 
               <div className="flex flex-col items-center gap-3 pt-2">
+                <label className="flex w-full items-start gap-3 rounded-lg border border-primary/10 bg-background/70 px-4 py-3 text-left text-xs text-ink-muted">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={acceptTerms}
+                    onChange={(e) => setAcceptTerms(e.target.checked)}
+                  />
+                  <span>
+                    I accept the FeyseFit{" "}
+                    <Link href="/terms" className="underline hover:text-primary">
+                      Terms of Service
+                    </Link>{" "}
+                    and{" "}
+                    <Link href="/privacy" className="underline hover:text-primary">
+                      Privacy Policy
+                    </Link>
+                    .
+                  </span>
+                </label>
                 <Button
                   type="submit"
                   disabled={isSubmitting}
@@ -297,16 +331,12 @@ export function CustomerOnboardingContent({ mode = "invite" }: CustomerOnboardin
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Tailoring your experience...
                     </span>
+                  ) : mode === "direct" ? (
+                    "Continue to marketplace"
                   ) : (
-                    "Create Professional Profile"
+                    "Complete client profile"
                   )}
                 </Button>
-                <p className="text-center text-xs text-ink-muted">
-                  By continuing, you agree to our{" "}
-                  <Link href="/terms" className="underline hover:text-primary">
-                    Terms of Service
-                  </Link>
-                </p>
               </div>
             </form>
           </div>

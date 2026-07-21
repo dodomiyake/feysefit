@@ -7,6 +7,7 @@ import {
   isPasswordStrongEnough,
   toGenericLoginError,
 } from "@/lib/auth-security";
+import { isTurnstileConfigured } from "@/lib/auth-abuse";
 
 function formatTimestamp() {
   return new Date().toLocaleTimeString("en-GB", {
@@ -40,8 +41,9 @@ export async function signIn(
       throw new Error(GENERIC_LOGIN_ERROR);
     }
     if (msg.includes("captcha") || msg.includes("timeout-or-duplicate")) {
+      console.error("signIn captcha rejected:", error.message);
       throw new Error(
-        "Security check failed or expired. Complete the human verification again, then try signing in."
+        "Security check expired or already used. Wait for a fresh Success check, then try signing in once."
       );
     }
     throw new Error(toGenericLoginError(error.message) || GENERIC_LOGIN_ERROR);
@@ -96,6 +98,13 @@ export async function signUp(input: {
     throw new Error("Password must be at least 8 characters and include a symbol.");
   }
 
+  // Turnstile tokens are single-use. Never call Supabase signup without a fresh solved token
+  // when CAPTCHA is configured — otherwise accounts can be created while the UI still looks blocked.
+  const captchaToken = input.captchaToken?.trim() || "";
+  if (isTurnstileConfigured() && !captchaToken) {
+    throw new Error("Complete the security check to prove you are human, then try again.");
+  }
+
   const supabase = createClient();
   const origin =
     typeof window !== "undefined" ? window.location.origin : resolveAppOrigin();
@@ -106,7 +115,7 @@ export async function signUp(input: {
     password: input.password,
     options: {
       emailRedirectTo,
-      captchaToken: input.captchaToken?.trim() || undefined,
+      ...(captchaToken ? { captchaToken } : {}),
       data: {
         name: input.name.trim(),
         role: input.role,
@@ -118,12 +127,15 @@ export async function signUp(input: {
   if (error) {
     const msg = error.message.toLowerCase();
     if (msg.includes("captcha") || msg.includes("timeout-or-duplicate")) {
+      console.error("signUp captcha rejected:", error.message);
       throw new Error(
-        "Security check failed or expired. Complete the human verification again, then try signing in."
+        "Security check expired or already used. Wait for a fresh Success check, then click Create Account once."
       );
     }
     if (msg.includes("already") || msg.includes("registered") || msg.includes("exists")) {
-      throw new Error("Unable to create an account with those details. Try signing in instead.");
+      throw new Error(
+        "An account with this email already exists. Sign in instead, or use a different email."
+      );
     }
     throw new Error(error.message);
   }

@@ -97,18 +97,70 @@ function assertNotExecutable(file: File) {
   }
 }
 
-function assertImageFile(file: File) {
-  assertNotExecutable(file);
-  if (!IMAGE_MIME.has(file.type)) {
-    throw new Error("Please upload a JPG, PNG, WebP, or GIF image.");
+const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
+
+/**
+ * Detect the real image format from the file's magic bytes. This is stricter and more
+ * reliable than file.name or file.type: a renamed PDF fails even if called photo.png,
+ * and a genuine PNG passes even when Windows reports a quirky MIME (e.g. image/x-png).
+ */
+async function sniffImageMime(file: File): Promise<string | null> {
+  let bytes: Uint8Array;
+  try {
+    bytes = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+  } catch {
+    return null;
+  }
+  if (bytes.length < 12) return null;
+
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+    return "image/png";
+  }
+  // JPEG: FF D8 FF
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return "image/jpeg";
+  }
+  // GIF: "GIF8"
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) {
+    return "image/gif";
+  }
+  // WebP: "RIFF" .... "WEBP"
+  if (
+    bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+    bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
+  ) {
+    return "image/webp";
+  }
+  return null;
+}
+
+/**
+ * Strict content-based image validation. Returns a user-facing error naming the file,
+ * or null when the image is valid. The detected canonical MIME is what uploads use.
+ */
+export async function validateImageFile(file: File): Promise<string | null> {
+  const extension = getFileExtension(file);
+  if (extension && BLOCKED_EXTENSIONS.has(extension)) {
+    return `"${file.name}" is not allowed.`;
+  }
+  const detected = await sniffImageMime(file);
+  if (!detected) {
+    return `"${file.name}" is not a supported image. Use JPG, PNG, WebP, or GIF.`;
   }
   if (file.size > MAX_STORAGE_IMAGE_BYTES) {
-    throw new Error("Image must be 5MB or smaller.");
+    return `"${file.name}" is larger than 5MB. Compress it and try again.`;
   }
-  const extension = getFileExtension(file);
-  if (!extension || BLOCKED_EXTENSIONS.has(extension)) {
-    throw new Error("Please upload a JPG, PNG, WebP, or GIF image.");
-  }
+  return null;
+}
+
+async function assertImageFile(file: File): Promise<string> {
+  assertNotExecutable(file);
+  const error = await validateImageFile(file);
+  if (error) throw new Error(error);
+  const detected = await sniffImageMime(file);
+  if (!detected) throw new Error(`"${file.name}" is not a supported image.`);
+  return detected;
 }
 
 /** Durable public-shaped URL for DB persistence (not readable if the bucket is private). */
@@ -142,11 +194,12 @@ async function uploadOwnedObject(
   file: File,
   prefix: string,
   projectId?: string | null,
-  contentType?: string
+  contentType?: string,
+  forcedExtension?: string
 ): Promise<string> {
   assertNotExecutable(file);
   const supabase = createClient();
-  const extension = getFileExtension(file);
+  const extension = forcedExtension || getFileExtension(file);
   if (!extension) {
     throw new Error("Unsupported or missing file extension.");
   }
@@ -195,6 +248,13 @@ export async function resolveStorageAccessUrl(url: string): Promise<string> {
   return data.signedUrl;
 }
 
+const MIME_TO_EXTENSION: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+};
+
 export async function uploadImage(
   bucket: StorageBucket,
   ownerId: string,
@@ -202,8 +262,18 @@ export async function uploadImage(
   prefix = "image",
   projectId?: string | null
 ): Promise<string> {
-  assertImageFile(file);
-  return uploadOwnedObject(bucket, ownerId, file, prefix, projectId, file.type);
+  // Detected content type wins over browser-reported MIME and file name — the storage
+  // bucket rejects non-canonical MIMEs (e.g. image/x-png) even for genuine images.
+  const detectedType = await assertImageFile(file);
+  return uploadOwnedObject(
+    bucket,
+    ownerId,
+    file,
+    prefix,
+    projectId,
+    detectedType,
+    MIME_TO_EXTENSION[detectedType]
+  );
 }
 
 export async function uploadStorageFile(

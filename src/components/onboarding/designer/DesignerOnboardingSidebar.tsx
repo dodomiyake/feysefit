@@ -15,9 +15,9 @@ import type { LucideIcon } from "lucide-react";
 
 export const DESIGNER_ONBOARDING_STEPS = [
   { label: "Professional Details", icon: UserPlus },
-  { label: "Contact & Story", icon: Contact },
+  { label: "Contact & Services", icon: Contact },
   { label: "Portfolio Showcase", icon: Images },
-  { label: "Marketplace Profile", icon: Store },
+  { label: "Review & Terms", icon: Store },
 ] as const;
 
 interface DesignerOnboardingSidebarProps {

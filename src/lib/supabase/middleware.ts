@@ -8,6 +8,7 @@ import {
   isRoleAllowed,
   loginPathForRequirement,
 } from "@/lib/auth-routes";
+import { normalizeOnboardingPath, normalizeOnboardingStatus, postAuthDestination } from "@/lib/onboarding";
 import {
   evaluateSessionClocks,
   getRememberCookieOptions,
@@ -89,22 +90,44 @@ function clearSessionClockCookies(response: NextResponse) {
 type UserProfile = {
   role: UserRole;
   account_status: "active" | "suspended" | "banned";
+  onboarding_status: string;
+  onboarding_path: string;
+  onboarding_step: string;
 };
 
 async function loadUserProfile(
   supabase: ReturnType<typeof createServerClient<Database>>,
   userId: string
 ): Promise<UserProfile | null> {
-  const { data: profile } = await supabase
+  const { data: profile, error } = await supabase
+    .from("users")
+    .select("role, account_status, onboarding_status, onboarding_path, onboarding_step")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (!error && profile) {
+    return {
+      role: profile.role as UserRole,
+      account_status: profile.account_status ?? "active",
+      onboarding_status: profile.onboarding_status ?? "completed",
+      onboarding_path: profile.onboarding_path ?? "",
+      onboarding_step: profile.onboarding_step ?? "",
+    };
+  }
+
+  // Fallback when onboarding columns are not migrated yet.
+  const { data: legacy } = await supabase
     .from("users")
     .select("role, account_status")
     .eq("id", userId)
     .maybeSingle();
-
-  if (!profile) return null;
+  if (!legacy) return null;
   return {
-    role: profile.role as UserRole,
-    account_status: profile.account_status ?? "active",
+    role: legacy.role as UserRole,
+    account_status: legacy.account_status ?? "active",
+    onboarding_status: "completed",
+    onboarding_path: "",
+    onboarding_step: "",
   };
 }
 
@@ -175,7 +198,14 @@ export async function updateSession(request: NextRequest) {
       return redirectWithCookies(
         request,
         supabaseResponse,
-        profile ? dashboardForRole(profile.role) : "/login"
+        profile
+          ? postAuthDestination({
+              role: profile.role,
+              onboardingStatus: normalizeOnboardingStatus(profile.onboarding_status),
+              onboardingPath: normalizeOnboardingPath(profile.onboarding_path),
+              onboardingStep: profile.onboarding_step,
+            })
+          : "/login"
       );
     }
 
@@ -236,6 +266,29 @@ export async function updateSession(request: NextRequest) {
         return redirectWithCookies(request, supabaseResponse, "/clients/measurements");
       }
       return redirectWithCookies(request, supabaseResponse, dashboardForRole(profile.role));
+    }
+
+    // Incomplete onboarding: keep users on setup until finished.
+    const onboardingIncomplete =
+      profile.role !== "admin" &&
+      normalizeOnboardingStatus(profile.onboarding_status) !== "completed";
+    const isOnboardingRoute = pathname.startsWith("/onboarding/");
+    const isAuthUtilityRoute =
+      pathname.startsWith("/auth/") ||
+      pathname.startsWith("/verify-email") ||
+      pathname.startsWith("/terms") ||
+      pathname.startsWith("/privacy");
+    if (onboardingIncomplete && !isOnboardingRoute && !isAuthUtilityRoute) {
+      return redirectWithCookies(
+        request,
+        supabaseResponse,
+        postAuthDestination({
+          role: profile.role,
+          onboardingStatus: normalizeOnboardingStatus(profile.onboarding_status),
+          onboardingPath: normalizeOnboardingPath(profile.onboarding_path),
+          onboardingStep: profile.onboarding_step,
+        })
+      );
     }
 
     // MFA / AAL gates (skip while completing MFA setup or challenge)

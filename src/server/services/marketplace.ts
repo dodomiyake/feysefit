@@ -48,6 +48,8 @@ export async function updateMarketplaceApproval(
 
   if (patch.status === "approved") {
     await setDesignerMarketplaceLive(row.designerId, true);
+  } else if (patch.status === "declined") {
+    await setDesignerMarketplaceLive(row.designerId, false);
   }
 
   return mapApproval(row);
@@ -62,7 +64,8 @@ export async function createMarketplaceApproval(input: MarketplaceApproval) {
       businessName: input.businessName,
       specialty: input.specialty,
       submittedAt: input.submittedAt,
-      status: input.status,
+      // Submission never self-approves; only the admin PATCH flow may approve it.
+      status: "pending",
       adminNotes: input.adminNotes,
       declineReason: input.declineReason,
     },

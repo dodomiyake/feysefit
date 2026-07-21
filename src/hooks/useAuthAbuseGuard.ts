@@ -120,6 +120,7 @@ export function useAuthAbuseGuard(action: AuthAbuseAction, subject: string) {
 
     let cancelled = false;
     setCaptchaStatus("loading");
+    setCaptchaToken(null);
 
     const mount = async () => {
       try {
@@ -193,6 +194,27 @@ export function useAuthAbuseGuard(action: AuthAbuseAction, subject: string) {
     }
   }, []);
 
+  /**
+   * Take the current token for a single auth request and immediately clear/reset
+   * the widget. Turnstile tokens are single-use — leaving "Success!" visible after
+   * submit made retries look valid while sending an already-consumed token.
+   */
+  const consumeCaptchaToken = useCallback(() => {
+    const token = captchaToken?.trim() || null;
+    setCaptchaToken(null);
+    if (token) {
+      setCaptchaStatus((current) => (current === "idle" ? current : "ready"));
+      if (widgetIdRef.current && window.turnstile) {
+        try {
+          window.turnstile.reset(widgetIdRef.current);
+        } catch {
+          // ignore
+        }
+      }
+    }
+    return token;
+  }, [captchaToken]);
+
   const precheck = useCallback(() => {
     return assertAuthAttemptAllowed(action, subject, captchaToken);
   }, [action, subject, captchaToken]);
@@ -222,6 +244,7 @@ export function useAuthAbuseGuard(action: AuthAbuseAction, subject: string) {
     onFailure,
     onSuccess,
     resetCaptcha,
+    consumeCaptchaToken,
     refresh,
   };
 }

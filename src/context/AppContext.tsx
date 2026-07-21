@@ -82,6 +82,8 @@ interface AppContextValue {
     password: string,
     options?: { rememberMe?: boolean; captchaToken?: string | null }
   ) => Promise<AuthUser>;
+  /** Hydrate app session after signup when Supabase already established a session (no second captcha). */
+  completeSignupSession: (user: AuthUser) => Promise<void>;
   logout: () => Promise<void>;
   measurementUnit: "inches" | "cm";
   setMeasurementUnit: (unit: "inches" | "cm") => void;
@@ -548,6 +550,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return user;
     },
     [useSupabase, refreshAppData]
+  );
+
+  const completeSignupSession = useCallback(
+    async (user: AuthUser) => {
+      await startAppSession(false);
+      setAuthUser(user);
+      setRoleState(user.role);
+      await refreshAppData(user);
+    },
+    [refreshAppData]
   );
 
   const logout = useCallback(async () => {
@@ -1452,6 +1464,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         hydrated,
         setRole,
         login,
+        completeSignupSession,
         logout,
         measurementUnit,
         setMeasurementUnit,

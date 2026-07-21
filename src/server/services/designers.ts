@@ -41,8 +41,18 @@ export async function getDesignerById(designerId: string) {
 }
 
 export async function listLiveMarketplaceDesignerIds() {
+  const approvals = await prisma.marketplaceApproval.findMany({
+    where: { status: "approved" },
+    select: { designerId: true },
+  });
+  const approvedDesignerIds = Array.from(new Set(approvals.map((row) => row.designerId)));
+  if (!approvedDesignerIds.length) return [];
+
   const rows = await prisma.designer.findMany({
-    where: { marketplaceLive: true },
+    where: {
+      marketplaceLive: true,
+      id: { in: approvedDesignerIds },
+    },
     select: { id: true },
   });
   return rows.map((row) => row.id);

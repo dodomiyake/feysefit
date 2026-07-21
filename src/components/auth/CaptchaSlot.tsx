@@ -32,6 +32,11 @@ export function CaptchaSlot({
             Cloudflare Turnstile.
           </p>
         ) : null}
+        {status === "ready" ? (
+          <p className="mb-2 max-w-xs text-center text-xs text-zinc-500">
+            Complete the check below, then submit once. The Success mark is single-use.
+          </p>
+        ) : null}
         <div ref={hostRef} className="flex min-h-[65px] w-full max-w-[320px] justify-center" />
       </div>
     </div>

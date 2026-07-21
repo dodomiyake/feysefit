@@ -8,6 +8,8 @@ import { CaptchaSlot } from "@/components/auth/CaptchaSlot";
 import { Button } from "@/components/ui/Button";
 import { useApp } from "@/context/AppContext";
 import { isSupabaseEnabled } from "@/lib/config/backend";
+import { postAuthDestination } from "@/lib/onboarding";
+import { getUserOnboardingState } from "@/lib/services/onboardingService";
 import { resendSignupConfirmation } from "@/lib/services/authService";
 import { useAuthAbuseGuard } from "@/hooks/useAuthAbuseGuard";
 import { logSecurityEvent } from "@/lib/security-events";
@@ -32,16 +34,38 @@ function VerifyEmailContent() {
 
   useEffect(() => {
     if (!hydrated) return;
-    if (authUser?.emailConfirmed) {
-      router.replace(
+    if (!authUser?.emailConfirmed) return;
+
+    let cancelled = false;
+    void (async () => {
+      let destination =
         authUser.role === "designer"
           ? "/dashboard/designer"
           : authUser.role === "admin"
             ? "/dashboard/admin"
-            : "/dashboard/customer"
-      );
-    }
-  }, [authUser, hydrated, router]);
+            : "/dashboard/customer";
+
+      if (useSupabase && authUser.id && authUser.role !== "admin") {
+        try {
+          const onboarding = await getUserOnboardingState(authUser.id);
+          destination = postAuthDestination({
+            role: authUser.role,
+            onboardingStatus: onboarding.status,
+            onboardingPath: onboarding.path,
+            onboardingStep: onboarding.step,
+          });
+        } catch {
+          // Keep dashboard fallback.
+        }
+      }
+
+      if (!cancelled) router.replace(destination);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser, hydrated, router, useSupabase]);
 
   const handleResend = async () => {
     if (!useSupabase) {

@@ -39,7 +39,7 @@ export function IdentityUploadSlot({
       <input
         ref={inputRef}
         type="file"
-        accept="image/jpeg,image/png,image/webp"
+        accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif"
         className="hidden"
         onChange={(event) => {
           const file = event.target.files?.[0];
