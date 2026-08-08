@@ -45,6 +45,6 @@ describe("getBackendMode", () => {
     vi.stubEnv("NODE_ENV", "production");
 
     expect(() => getBackendMode()).toThrow(/disabled in production/i);
-    expect(() => isDemoAuthAllowed()).toThrow(/disabled in production/i);
+    expect(isDemoAuthAllowed()).toBe(false);
   });
 });
