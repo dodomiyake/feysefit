@@ -21,6 +21,14 @@ grant usage on schema public to anon, authenticated, service_role;
 create schema if not exists auth;
 create schema if not exists storage;
 
+create table if not exists auth.users (
+  id uuid primary key,
+  email text,
+  raw_user_meta_data jsonb default '{}'::jsonb,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
 create or replace function auth.uid()
 returns uuid
 language sql
@@ -126,6 +134,7 @@ create table if not exists public.customer_profiles (
   id uuid primary key default gen_random_uuid(),
   user_id uuid,
   email text,
+  name text,
   registration_type text
 );
 alter table public.customer_profiles enable row level security;
@@ -188,8 +197,14 @@ alter table public.testimonials enable row level security;
 
 create table if not exists public.projects (
   id uuid primary key default gen_random_uuid(),
+  project_code text,
+  title text,
+  customer_name text,
   customer_id uuid,
   designer_id uuid,
+  outfit_type text,
+  deadline date,
+  budget numeric,
   status text
 );
 alter table public.projects enable row level security;
