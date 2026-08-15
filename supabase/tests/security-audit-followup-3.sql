@@ -37,10 +37,11 @@ begin
       or position('current_designer_profile_id' in coalesce(qual, '') || coalesce(with_check, '')) > 0
       or position('current_user_role' in coalesce(qual, '') || coalesce(with_check, '')) > 0
       or position('is_admin()' in coalesce(qual, '') || coalesce(with_check, '')) > 0
+      or position('auth.uid()' in coalesce(qual, '') || coalesce(with_check, '')) > 0
     );
 
   if exposed_count <> 0 then
-    raise exception 'FAIL: % public policies still require authenticated helpers', exposed_count;
+    raise exception 'FAIL: % public policies still require authenticated identity context', exposed_count;
   end if;
   raise notice 'PASS: public policies do not call authenticated helpers';
 end $$;
