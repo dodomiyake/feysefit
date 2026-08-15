@@ -71,3 +71,24 @@ export async function assertCanAccessProject(
 
   return forbidden();
 }
+
+export async function assertCanAccessConversation(
+  session: SessionPayload,
+  conversationId: string
+): Promise<true | Response> {
+  if (session.role === "admin") return true;
+
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    select: { designerId: true, customerId: true },
+  });
+  if (!conversation) return jsonError("Conversation not found", 404);
+
+  if (session.role === "designer" && session.designerId && conversation.designerId === session.designerId) {
+    return true;
+  }
+  if (session.role === "customer" && session.customerId && conversation.customerId === session.customerId) {
+    return true;
+  }
+  return forbidden();
+}

@@ -53,10 +53,6 @@ const BLOCKED_EXTENSIONS = new Set([
 const IMAGE_MIME = new Set<string>(STORAGE_IMAGE_TYPES);
 const DOCUMENT_MIME = new Set<string>(STORAGE_DOCUMENT_TYPES);
 
-function sanitizeFileName(name: string) {
-  return name.replace(/[^a-zA-Z0-9._-]/g, "-").toLowerCase();
-}
-
 function getFileExtension(file: File) {
   const fromName = file.name.includes(".") ? file.name.split(".").pop() : null;
   if (fromName && /^[a-z0-9]+$/i.test(fromName)) return fromName.toLowerCase();
@@ -76,13 +72,6 @@ function getFileExtension(file: File) {
   return mimeMap[file.type] || "";
 }
 
-function getBaseFileName(name: string) {
-  const sanitized = sanitizeFileName(name);
-  const lastDot = sanitized.lastIndexOf(".");
-  if (lastDot <= 0) return sanitized || "file";
-  return sanitized.slice(0, lastDot) || "file";
-}
-
 function assertNotExecutable(file: File) {
   const extension = file.name.includes(".")
     ? file.name.split(".").pop()?.toLowerCase()
@@ -97,13 +86,6 @@ function assertNotExecutable(file: File) {
   }
 }
 
-const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
-
-/**
- * Detect the real image format from the file's magic bytes. This is stricter and more
- * reliable than file.name or file.type: a renamed PDF fails even if called photo.png,
- * and a genuine PNG passes even when Windows reports a quirky MIME (e.g. image/x-png).
- */
 async function sniffImageMime(file: File): Promise<string | null> {
   let bytes: Uint8Array;
   try {
@@ -203,8 +185,7 @@ async function uploadOwnedObject(
   if (!extension) {
     throw new Error("Unsupported or missing file extension.");
   }
-  const baseName = getBaseFileName(file.name);
-  const fileName = `${prefix}-${Date.now()}-${baseName}.${extension}`;
+  const fileName = `${prefix}-${crypto.randomUUID()}.${extension}`;
   const scopeId = await resolveProjectUuidForStorage(projectId);
   const path = buildOwnedObjectPath(ownerId, fileName, scopeId);
 
@@ -255,6 +236,28 @@ const MIME_TO_EXTENSION: Record<string, string> = {
   "image/gif": "gif",
 };
 
+async function reencodeImageWithoutExif(file: File, mime: string): Promise<File> {
+  if (mime === "image/gif") return file;
+  if (typeof createImageBitmap !== "function") return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext("2d");
+    if (!context) return file;
+    context.drawImage(bitmap, 0, 0);
+    bitmap.close();
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, mime, 0.92)
+    );
+    if (!blob) return file;
+    return new File([blob], file.name, { type: mime });
+  } catch {
+    return file;
+  }
+}
+
 export async function uploadImage(
   bucket: StorageBucket,
   ownerId: string,
@@ -262,13 +265,12 @@ export async function uploadImage(
   prefix = "image",
   projectId?: string | null
 ): Promise<string> {
-  // Detected content type wins over browser-reported MIME and file name — the storage
-  // bucket rejects non-canonical MIMEs (e.g. image/x-png) even for genuine images.
   const detectedType = await assertImageFile(file);
+  const stripped = await reencodeImageWithoutExif(file, detectedType);
   return uploadOwnedObject(
     bucket,
     ownerId,
-    file,
+    stripped,
     prefix,
     projectId,
     detectedType,

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { mapProject } from "@/lib/supabase/mappers";
+import { runSensitiveAction } from "@/lib/security/sensitive-rate-limit";
 import type { CustomerLinkState } from "@/lib/customer-access";
 import type { MarketplaceApproval } from "@/lib/marketplace-approvals";
 import type { Customer, Designer, Project } from "@/lib/mock-data";
@@ -102,19 +103,14 @@ export async function getAdminDesignerDetail(
   if (!designer) return null;
 
   const supabase = createClient();
-  const { data: profileRow, error: profileError } = await supabase
-    .from("designer_profiles")
-    .select("user_id, admin_notes, users(email)")
-    .eq("id", profileUuid)
-    .maybeSingle();
+  const { data: moderation, error: profileError } = await supabase.rpc(
+    "admin_get_designer_moderation",
+    { p_designer_id: profileUuid }
+  );
   if (profileError) throw new Error(profileError.message);
 
-  const profileData = profileRow as {
-    admin_notes?: string | null;
-    users?: { email: string } | null;
-  } | null;
-  const email = profileData?.users?.email ?? "";
-  const adminNotes = profileData?.admin_notes ?? "";
+  const email = moderation?.[0]?.email ?? "";
+  const adminNotes = moderation?.[0]?.admin_notes ?? "";
 
   const [clients, projects, approvals, liveIds] = await Promise.all([
     listCustomersForDesigner(designerKey),
@@ -140,10 +136,12 @@ export async function adminSetDesignerMarketplaceLive(designerKey: string, live:
   if (!profileUuid) throw new Error("Designer not found");
 
   const supabase = createClient();
-  const { error } = await supabase
-    .from("designer_profiles")
-    .update({ marketplace_live: live, updated_at: new Date().toISOString() })
-    .eq("id", profileUuid);
+  const { error } = await runSensitiveAction("adminMutation", profileUuid, () =>
+    supabase
+      .from("designer_profiles")
+      .update({ marketplace_live: live, updated_at: new Date().toISOString() })
+      .eq("id", profileUuid)
+  );
   if (error) throw new Error(error.message);
 
   return listLiveMarketplaceDesignerIds();
@@ -190,10 +188,12 @@ export async function updateAdminCustomerNotes(customerKey: string, adminNotes: 
   if (!profileUuid) throw new Error("Customer not found");
 
   const supabase = createClient();
-  const { error } = await supabase
-    .from("customer_profiles")
-    .update({ admin_notes: adminNotes || null, updated_at: new Date().toISOString() })
-    .eq("id", profileUuid);
+  const { error } = await runSensitiveAction("adminMutation", profileUuid, () =>
+    supabase
+      .from("customer_profiles")
+      .update({ admin_notes: adminNotes || null, updated_at: new Date().toISOString() })
+      .eq("id", profileUuid)
+  );
   if (error) throw new Error(error.message);
 }
 
@@ -202,9 +202,11 @@ export async function updateAdminDesignerNotes(designerKey: string, adminNotes: 
   if (!profileUuid) throw new Error("Designer not found");
 
   const supabase = createClient();
-  const { error } = await supabase
-    .from("designer_profiles")
-    .update({ admin_notes: adminNotes || null, updated_at: new Date().toISOString() })
-    .eq("id", profileUuid);
+  const { error } = await runSensitiveAction("adminMutation", profileUuid, () =>
+    supabase.rpc("admin_set_designer_notes", {
+      p_designer_id: profileUuid,
+      p_notes: adminNotes,
+    })
+  );
   if (error) throw new Error(error.message);
 }

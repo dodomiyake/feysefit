@@ -20,6 +20,7 @@ import {
   SESSION_STARTED_COOKIE,
   isSupabaseAuthCookie,
 } from "@/lib/auth-security";
+import { decideAdminMfaAccess } from "@/lib/security/admin-mfa";
 
 const AUTH_REFRESH_TIMEOUT_MS = 4_000;
 
@@ -309,11 +310,23 @@ export async function updateSession(request: NextRequest) {
     const isMfaRoute = pathname.startsWith("/auth/mfa");
     if (!isMfaRoute) {
       try {
-        const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        const { data: aal, error: aalError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        const decision = decideAdminMfaAccess({
+          isAdmin: profile.role === "admin" || isAdminRoute,
+          aal: aal ?? null,
+          checkFailed: Boolean(aalError) || !aal,
+        });
+        const nextUrl = `${pathname}${request.nextUrl.search}`;
+        if (decision === "deny" && (profile.role === "admin" || isAdminRoute)) {
+          return redirectWithCookies(
+            request,
+            supabaseResponse,
+            `/login/admin?error=mfa_unavailable&next=${encodeURIComponent(nextUrl)}`
+          );
+        }
         if (aal) {
-          const nextUrl = `${pathname}${request.nextUrl.search}`;
           // Admins must enroll TOTP before using the rest of the app.
-          if (profile.role === "admin" && aal.nextLevel === "aal1") {
+          if (decision === "setup" || (profile.role === "admin" && aal.nextLevel === "aal1")) {
             return redirectWithCookies(
               request,
               supabaseResponse,
@@ -321,7 +334,10 @@ export async function updateSession(request: NextRequest) {
             );
           }
           // Enrolled users must complete a TOTP challenge (AAL2) for this session.
-          if (aal.currentLevel !== "aal2" && aal.nextLevel === "aal2") {
+          if (
+            decision === "challenge" ||
+            (aal.currentLevel !== "aal2" && aal.nextLevel === "aal2")
+          ) {
             return redirectWithCookies(
               request,
               supabaseResponse,
@@ -330,7 +346,13 @@ export async function updateSession(request: NextRequest) {
           }
         }
       } catch {
-        // Do not block the request if MFA APIs are unavailable (e.g. MFA not enabled in project).
+        if (profile.role === "admin" || isAdminRoute) {
+          return redirectWithCookies(
+            request,
+            supabaseResponse,
+            `/login/admin?error=mfa_unavailable&next=${encodeURIComponent(`${pathname}${request.nextUrl.search}`)}`
+          );
+        }
       }
     }
 

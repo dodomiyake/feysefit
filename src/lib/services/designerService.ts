@@ -37,19 +37,18 @@ function attachPublicPortfolioImages(
 }
 
 /**
- * Anonymous marketplace directory. Uses the anon key, public-safe columns only,
- * marketplace_live filter, and RLS (approved listing required to read the row).
+ * Anonymous marketplace directory. Uses the public projection, not designer_profiles.
+ * Column lists in the client are not a security boundary — the view omits private fields.
  */
 export async function listPublicMarketplaceDesigners(
   client: PublicMarketplaceClient = createClient()
 ): Promise<Designer[]> {
   const { data: designers, error } = await client
-    .from("designer_profiles")
+    .from("marketplace_designers")
     .select(PUBLIC_DESIGNER_PROFILE_SELECT)
-    .eq("marketplace_live", true)
     .order("designer_name");
   if (error) {
-    logDevSupabaseError("listPublicMarketplaceDesigners.designer_profiles", error);
+    logDevSupabaseError("listPublicMarketplaceDesigners.marketplace_designers", error);
     throw new Error(error.message);
   }
 
@@ -94,12 +93,25 @@ export async function listDesigners(): Promise<Designer[]> {
 export async function getDesignerById(designerId: string): Promise<Designer | null> {
   if (!designerId) return null;
   const supabase = createClient();
-  const { data, error } = await supabase
-    .from("designer_profiles")
+  const { data: publicRow, error: publicError } = await supabase
+    .from("marketplace_designers")
     .select(PUBLIC_DESIGNER_PROFILE_SELECT)
     .or(legacyOrIdFilter(designerId))
     .maybeSingle();
-  if (error) throw new Error(error.message);
+  if (publicError) throw new Error(publicError.message);
+
+  let data = publicRow;
+  if (!data) {
+    const { data: sessionData } = await supabase.auth.getUser();
+    if (!sessionData.user) return null;
+    const { data: privileged, error } = await supabase
+      .from("designer_profiles")
+      .select(PUBLIC_DESIGNER_PROFILE_SELECT)
+      .or(legacyOrIdFilter(designerId))
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    data = privileged;
+  }
   if (!data) return null;
 
   const { data: portfolios } = await supabase
@@ -118,39 +130,34 @@ export async function getDesignerById(designerId: string): Promise<Designer | nu
 export async function getOwnDesignerContact(): Promise<string> {
   const supabase = createClient();
   const { data: sessionData } = await supabase.auth.getUser();
-  const userId = sessionData.user?.id;
-  if (!userId) return "";
+  if (!sessionData.user) return "";
 
   const { data, error } = await supabase
-    .from("designer_profiles")
+    .from("designer_private_details")
     .select("phone")
-    .eq("user_id", userId)
     .maybeSingle();
   if (error) throw new Error(error.message);
   return data?.phone?.trim() ?? "";
 }
 
+async function upsertOwnDesignerPhone(designerId: string, phone: string) {
+  const supabase = createClient();
+  const { error } = await supabase.from("designer_private_details").upsert(
+    {
+      designer_id: designerId,
+      phone,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "designer_id" }
+  );
+  if (error) throw new Error(error.message);
+}
+
 export async function listLiveMarketplaceDesignerIds(): Promise<string[]> {
   const supabase = createClient();
-  // A boolean flag alone is not sufficient: only an admin-approved listing may
-  // make a designer discoverable. This also protects deployments that have not
-  // yet applied the database trigger hardening patch.
-  const { data: approvedListings, error: approvalError } = await supabase
-    .from("marketplace_listings")
-    .select("designer_id")
-    .eq("status", "approved");
-  if (approvalError) throw new Error(approvalError.message);
-
-  const approvedDesignerIds = Array.from(
-    new Set((approvedListings ?? []).map((listing) => listing.designer_id))
-  );
-  if (!approvedDesignerIds.length) return [];
-
   const { data, error } = await supabase
-    .from("designer_profiles")
-    .select("id, legacy_id")
-    .eq("marketplace_live", true)
-    .in("id", approvedDesignerIds);
+    .from("marketplace_designers")
+    .select("id, legacy_id");
   if (error) throw new Error(error.message);
   return (data ?? []).map((row) => row.legacy_id ?? row.id);
 }
@@ -210,7 +217,6 @@ export async function updateDesignerProfile(
       ...(patch.specialty !== undefined ? { specialty: patch.specialty } : {}),
       ...(patch.bio !== undefined ? { bio: patch.bio } : {}),
       ...(patch.tagline !== undefined ? { tagline: patch.tagline } : {}),
-      ...(patch.phone !== undefined ? { phone: patch.phone } : {}),
       ...(patch.serviceAreas !== undefined ? { service_areas: patch.serviceAreas } : {}),
       ...(patch.coverImage !== undefined ? { cover_image: patch.coverImage } : {}),
       ...(patch.profileImage !== undefined ? { profile_image: patch.profileImage } : {}),
@@ -229,6 +235,9 @@ export async function updateDesignerProfile(
     .select(PUBLIC_DESIGNER_PROFILE_SELECT)
     .single();
   if (error) throw new Error(error.message);
+  if (patch.phone !== undefined) {
+    await upsertOwnDesignerPhone(designerId, patch.phone);
+  }
   return mapDesigner(data as PublicDesignerProfile);
 }
 

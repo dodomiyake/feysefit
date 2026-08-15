@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Playfair_Display, Inter } from "next/font/google";
+import { headers } from "next/headers";
 import { AppProvider } from "@/context/AppContext";
 import { ReauthProvider } from "@/context/ReauthContext";
 import { Toast } from "@/components/ui/Toast";
@@ -23,13 +24,18 @@ export const metadata: Metadata = {
     "Premium fashion technology platform for designers to manage clients, measurements, projects, and communication remotely.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
-    <html lang="en" className={`${playfair.variable} ${inter.variable} h-full antialiased`}>
+    <html
+      lang="en"
+      className={`${playfair.variable} ${inter.variable} h-full antialiased`}
+      data-csp-nonce={nonce}
+    >
       <body className="min-h-full" suppressHydrationWarning>
         <AppProvider>
           <ReauthProvider>

@@ -157,7 +157,7 @@ export function AccountSecurityContent() {
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isPasswordStrongEnough(newPassword)) {
-      showToast("Password must be at least 8 characters and include a symbol.", "error");
+      showToast("Password must be at least 12 characters.", "error");
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -311,7 +311,7 @@ export function AccountSecurityContent() {
         ) : (
           <form onSubmit={(e) => void handlePasswordSubmit(e)} className="space-y-4">
             <p className="text-sm text-ink-muted">
-              Use at least 8 characters including a symbol. Other devices will be signed out after
+              Use at least 12 characters. Passphrases and password-manager secrets are both fine. Other devices will be signed out after
               you save.
             </p>
             <div className="space-y-1">
@@ -325,7 +325,7 @@ export function AccountSecurityContent() {
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 className={fieldClass}
-                minLength={8}
+                minLength={12}
                 required
               />
             </div>
@@ -343,7 +343,7 @@ export function AccountSecurityContent() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className={fieldClass}
-                minLength={8}
+                minLength={12}
                 required
               />
             </div>

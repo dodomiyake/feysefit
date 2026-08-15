@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/lib/services/designerService.test.ts src/lib/designer-profile-fields.test.ts src/lib/marketplace-display.test.ts src/lib/auth-security.test.ts src/lib/security/headers.test.ts src/lib/security/admin-mfa.test.ts src/lib/security/authorization-matrix.test.ts src/lib/security/rate-limit.test.ts src/server/http.test.ts src/server/api-auth.test.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",

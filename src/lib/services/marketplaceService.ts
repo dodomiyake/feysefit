@@ -12,6 +12,7 @@ import {
   resolveDesignerProfileId,
   setDesignerMarketplaceLive,
 } from "@/lib/services/designerService";
+import { runSensitiveAction } from "@/lib/security/sensitive-rate-limit";
 
 export interface MarketplaceDesignRequestInput {
   designerLegacyId: string;
@@ -87,6 +88,10 @@ export async function submitMarketplaceDesignRequest(
     throw new Error("Describe your vision before sending the request.");
   }
 
+  return runSensitiveAction(
+    "designRequest",
+    input.customerUserId ?? input.customerLegacyId,
+    async () => {
   const designerProfileId = await resolveDesignerProfileId(input.designerLegacyId);
   if (!designerProfileId) throw new Error("Designer not found");
 
@@ -165,6 +170,8 @@ export async function submitMarketplaceDesignRequest(
   });
 
   return { projectId: project.id };
+    }
+  );
 }
 
 export async function listMarketplaceApprovals(): Promise<MarketplaceApproval[]> {
@@ -222,16 +229,18 @@ export async function updateMarketplaceListing(
     .maybeSingle();
   if (!existing) throw new Error("Listing not found");
 
-  const { data, error } = await supabase
-    .from("marketplace_listings")
-    .update({
-      status: patch.status,
-      admin_notes: patch.adminNotes,
-      decline_reason: patch.declineReason,
-    })
-    .eq("id", existing.id)
-    .select("*")
-    .single();
+  const { data, error } = await runSensitiveAction("adminMutation", existing.id, () =>
+    supabase
+      .from("marketplace_listings")
+      .update({
+        status: patch.status,
+        admin_notes: patch.adminNotes,
+        decline_reason: patch.declineReason,
+      })
+      .eq("id", existing.id)
+      .select("*")
+      .single()
+  );
   if (error) throw new Error(error.message);
 
   if (patch.status === "approved") {

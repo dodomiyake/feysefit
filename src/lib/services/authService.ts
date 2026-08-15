@@ -8,6 +8,7 @@ import {
   toGenericLoginError,
 } from "@/lib/auth-security";
 import { isTurnstileConfigured } from "@/lib/auth-abuse";
+import { runSensitiveAction } from "@/lib/security/sensitive-rate-limit";
 
 function formatTimestamp() {
   return new Date().toLocaleTimeString("en-GB", {
@@ -27,13 +28,15 @@ export async function signIn(
   options?: { captchaToken?: string | null }
 ) {
   const supabase = createClient();
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: email.trim().toLowerCase(),
-    password,
-    options: options?.captchaToken
-      ? { captchaToken: options.captchaToken }
-      : undefined,
-  });
+  const { data, error } = await runSensitiveAction("authAbuse", email.trim().toLowerCase(), () =>
+    supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password,
+      options: options?.captchaToken
+        ? { captchaToken: options.captchaToken }
+        : undefined,
+    })
+  );
 
   if (error) {
     const msg = error.message.toLowerCase();
@@ -95,7 +98,7 @@ export async function signUp(input: {
     throw new Error("Invalid account type.");
   }
   if (!isPasswordStrongEnough(input.password)) {
-    throw new Error("Password must be at least 8 characters and include a symbol.");
+    throw new Error("Password must be at least 12 characters.");
   }
 
   // Turnstile tokens are single-use. Never call Supabase signup without a fresh solved token
@@ -110,20 +113,22 @@ export async function signUp(input: {
     typeof window !== "undefined" ? window.location.origin : resolveAppOrigin();
   const emailRedirectTo = `${origin}/auth/callback?next=${encodeURIComponent("/verify-email")}`;
 
-  const { data, error } = await supabase.auth.signUp({
-    email: input.email.trim().toLowerCase(),
-    password: input.password,
-    options: {
-      emailRedirectTo,
-      ...(captchaToken ? { captchaToken } : {}),
-      data: {
-        name: input.name.trim(),
-        role: input.role,
-        customer_path: input.customerPath,
-        invite_code: input.inviteCode,
+  const { data, error } = await runSensitiveAction("authAbuse", input.email.trim().toLowerCase(), () =>
+    supabase.auth.signUp({
+      email: input.email.trim().toLowerCase(),
+      password: input.password,
+      options: {
+        emailRedirectTo,
+        ...(captchaToken ? { captchaToken } : {}),
+        data: {
+          name: input.name.trim(),
+          role: input.role,
+          customer_path: input.customerPath,
+          invite_code: input.inviteCode,
+        },
       },
-    },
-  });
+    })
+  );
   if (error) {
     const msg = error.message.toLowerCase();
     if (msg.includes("captcha") || msg.includes("timeout-or-duplicate")) {
@@ -180,14 +185,16 @@ export async function resendSignupConfirmation(
   const supabase = createClient();
   const origin =
     typeof window !== "undefined" ? window.location.origin : resolveAppOrigin();
-  const { error } = await supabase.auth.resend({
-    type: "signup",
-    email: normalized,
-    options: {
-      emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent("/verify-email")}`,
-      captchaToken: options?.captchaToken?.trim() || undefined,
-    },
-  });
+  const { error } = await runSensitiveAction("authAbuse", normalized, () =>
+    supabase.auth.resend({
+      type: "signup",
+      email: normalized,
+      options: {
+        emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent("/verify-email")}`,
+        captchaToken: options?.captchaToken?.trim() || undefined,
+      },
+    })
+  );
   // Always present a generic outcome to callers (anti-enumeration).
   if (error) {
     console.error("resendSignupConfirmation:", error.message);
@@ -206,10 +213,12 @@ export async function resetPasswordForEmail(
     typeof window !== "undefined" ? window.location.origin : resolveAppOrigin();
   const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent("/reset-password")}`;
 
-  const { error } = await supabase.auth.resetPasswordForEmail(normalized, {
-    redirectTo,
-    captchaToken: options?.captchaToken?.trim() || undefined,
-  });
+  const { error } = await runSensitiveAction("authAbuse", normalized, () =>
+    supabase.auth.resetPasswordForEmail(normalized, {
+      redirectTo,
+      captchaToken: options?.captchaToken?.trim() || undefined,
+    })
+  );
   // Always present a generic outcome to the UI caller.
   if (error) {
     console.error("resetPasswordForEmail:", error.message);
@@ -263,13 +272,20 @@ export async function getCurrentUser(): Promise<
   let customerLegacyId: string | undefined;
 
   if (role === "designer") {
-    const { data: designer } = await supabase
-      .from("designer_profiles")
-      .select("id, legacy_id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    designerProfileId = designer?.id;
-    designerLegacyId = designer?.legacy_id ?? designer?.id;
+    const { data: ownDesigner, error: ownDesignerError } = await supabase.rpc("own_designer_profile");
+    const designer = ownDesignerError ? null : ownDesigner?.[0];
+    if (designer) {
+      designerProfileId = designer.id;
+      designerLegacyId = designer.legacy_id ?? designer.id;
+    } else {
+      const { data: legacyDesigner } = await supabase
+        .from("designer_profiles")
+        .select("id, legacy_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      designerProfileId = legacyDesigner?.id;
+      designerLegacyId = legacyDesigner?.legacy_id ?? legacyDesigner?.id;
+    }
   }
 
   if (role === "customer") {
@@ -329,7 +345,7 @@ export async function updateUserProfile(
 
 export async function updatePassword(newPassword: string) {
   if (!isPasswordStrongEnough(newPassword)) {
-    throw new Error("Password must be at least 8 characters and include a symbol.");
+    throw new Error("Password must be at least 12 characters.");
   }
 
   const supabase = createClient();

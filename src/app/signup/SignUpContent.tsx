@@ -100,8 +100,8 @@ export default function SignUpContent({ role }: SignUpContentProps) {
       return;
     }
     if (!isPasswordStrongEnough(password)) {
-      setFormError("Password must be at least 8 characters and include a symbol.");
-      showToast("Password must be at least 8 characters and include a symbol.", "error");
+      setFormError("Password must be at least 12 characters.");
+      showToast("Password must be at least 12 characters.", "error");
       return;
     }
     const blocked = abuse.precheck();
@@ -298,7 +298,7 @@ export default function SignUpContent({ role }: SignUpContentProps) {
                     </button>
                   </div>
                   <p className="text-xs text-ink-muted/70">
-                    Minimum 8 characters with at least one symbol.
+                    Minimum 12 characters. Passphrases and password-manager secrets are both fine.
                   </p>
                 </div>
               </div>

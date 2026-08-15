@@ -18,6 +18,7 @@ import {
 } from "@/lib/services/customerService";
 import { getDesignerById, listDesigners, resolveDesignerProfileId } from "@/lib/services/designerService";
 import { createProject, listProjects } from "@/lib/services/projectService";
+import { runSensitiveAction } from "@/lib/security/sensitive-rate-limit";
 import { isConversationReadOnly } from "@/lib/unlink-guards";
 import type { Customer, Designer } from "@/lib/mock-data";
 
@@ -354,21 +355,26 @@ export async function sendProjectMessage(input: {
     }
   }
 
-  const { data, error } = await supabase
-    .from("messages")
-    .insert({
-      project_id: projectUuid,
-      sender_user_id: input.senderUserId,
-      sender_role: input.senderRole,
-      sender_name: input.senderName,
-      text: trimmedText,
-      timestamp_label: formatTimestamp(),
-      attachments: input.attachments?.length
-        ? (input.attachments as unknown as Json)
-        : null,
-    })
-    .select("*")
-    .single();
+  const { data, error } = await runSensitiveAction(
+    "messagingWrite",
+    input.senderUserId ?? input.authUser?.id ?? projectUuid,
+    () =>
+      supabase
+        .from("messages")
+        .insert({
+          project_id: projectUuid,
+          sender_user_id: input.senderUserId,
+          sender_role: input.senderRole,
+          sender_name: input.senderName,
+          text: trimmedText,
+          timestamp_label: formatTimestamp(),
+          attachments: input.attachments?.length
+            ? (input.attachments as unknown as Json)
+            : null,
+        })
+        .select("*")
+        .single()
+  );
   if (error) throw new Error(error.message);
   return mapThreadMessage(data);
 }

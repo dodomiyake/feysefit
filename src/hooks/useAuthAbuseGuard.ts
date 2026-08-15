@@ -62,6 +62,8 @@ function loadTurnstileScript(): Promise<void> {
     script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
     script.async = true;
     script.defer = true;
+    const nonce = document.documentElement.dataset.cspNonce;
+    if (nonce) script.nonce = nonce;
     script.onload = () => resolve();
     script.onerror = () => reject(new Error("Turnstile failed to load"));
     document.head.appendChild(script);

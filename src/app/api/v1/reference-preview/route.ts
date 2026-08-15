@@ -1,5 +1,7 @@
 import { handleApiError, jsonData, jsonError } from "@/server/http";
 import { pinterestImageCandidates, upgradePinterestCdnUrl } from "@/lib/reference-image-url";
+import { createClient } from "@/lib/supabase/server";
+import { clientIpFromHeaders, runSensitiveHttpAction } from "@/lib/security/rate-limit";
 
 type PinterestOEmbed = {
   thumbnail_url?: string;
@@ -69,6 +71,12 @@ async function resolveFromOEmbed(pinUrl: string): Promise<string | null> {
 
 export async function GET(request: Request) {
   try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return jsonError("Unauthorized", 401);
+
     const { searchParams } = new URL(request.url);
     const url = searchParams.get("url");
     if (!url) return jsonError("url is required", 400);
@@ -76,7 +84,13 @@ export async function GET(request: Request) {
       return jsonError("Only Pinterest pin links are supported for preview resolution", 400);
     }
 
-    const imageUrl = (await resolveFromPinPage(url)) ?? (await resolveFromOEmbed(url));
+    const gated = await runSensitiveHttpAction(
+      "referencePreview",
+      `${clientIpFromHeaders(request.headers)}:${user.id}`,
+      async () => (await resolveFromPinPage(url)) ?? (await resolveFromOEmbed(url))
+    );
+    if (!gated.ok) return gated.response;
+    const imageUrl = gated.value;
     if (!imageUrl) {
       return jsonError("Could not resolve Pinterest pin", 502);
     }

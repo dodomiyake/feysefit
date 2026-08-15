@@ -25,6 +25,7 @@ import { markProjectDelivered, redeliverProject } from "@/lib/services/deliveryS
 import type { DbCustomerReference, DbProject, DbProjectItem } from "@/lib/types/database";
 import type { ProjectItemInput } from "@/lib/project-items";
 import { createProjectItems } from "@/lib/services/projectItemService";
+import { runSensitiveAction } from "@/lib/security/sensitive-rate-limit";
 
 type DesignerMeta = {
   id: string;
@@ -283,13 +284,8 @@ export async function createProject(
       throw new Error("Sign in again to create a project.");
     }
 
-    const { data: ownedDesigner } = await supabase
-      .from("designer_profiles")
-      .select("id")
-      .eq("id", input.designerProfileId)
-      .eq("user_id", userId)
-      .maybeSingle();
-    if (!ownedDesigner) {
+    const { data: ownedDesigner, error: ownedError } = await supabase.rpc("own_designer_profile");
+    if (ownedError || !ownedDesigner?.[0] || ownedDesigner[0].id !== input.designerProfileId) {
       throw new Error("Designer profile not found for this account. Sign out and sign back in.");
     }
 
@@ -312,31 +308,36 @@ export async function createProject(
   const now = new Date().toISOString();
   const startedDate = formatStartedDateFromIso(now);
 
-  const { data, error } = await supabase
-    .from("projects")
-    .insert({
-      project_code: code,
-      title: input.title,
-      customer_name: input.customerName,
-      customer_id: customerProfileId,
-      studio_client_id: studioClientUuid,
-      designer_id: input.designerProfileId,
-      outfit_type: input.outfitType,
-      deadline: input.deadline,
-      budget: input.budget,
-      description: input.description?.trim() ?? "",
-      status: "Enquiry",
-      reference_images: input.referenceImages ?? [],
-      internal_notes: input.internalNotes ?? "",
-      measurements: input.measurements ?? null,
-      measurement_recorded_by: input.measurementRecordedBy ?? null,
-      customer_update: input.customerUpdate ?? formatProjectCreatedCustomerUpdate(),
-      started_date: startedDate,
-      last_updated: lastUpdated,
-      updated_at: now,
-    })
-    .select("*")
-    .single();
+  const actorId =
+    (await supabase.auth.getUser()).data.user?.id ?? input.designerProfileId;
+
+  const { data, error } = await runSensitiveAction("designRequest", actorId, () =>
+    supabase
+      .from("projects")
+      .insert({
+        project_code: code,
+        title: input.title,
+        customer_name: input.customerName,
+        customer_id: customerProfileId,
+        studio_client_id: studioClientUuid,
+        designer_id: input.designerProfileId,
+        outfit_type: input.outfitType,
+        deadline: input.deadline,
+        budget: input.budget,
+        description: input.description?.trim() ?? "",
+        status: "Enquiry",
+        reference_images: input.referenceImages ?? [],
+        internal_notes: input.internalNotes ?? "",
+        measurements: input.measurements ?? null,
+        measurement_recorded_by: input.measurementRecordedBy ?? null,
+        customer_update: input.customerUpdate ?? formatProjectCreatedCustomerUpdate(),
+        started_date: startedDate,
+        last_updated: lastUpdated,
+        updated_at: now,
+      })
+      .select("*")
+      .single()
+  );
   if (error) {
     if (/row-level security/i.test(error.message)) {
       if (options?.skipActiveLinkCheck) {

@@ -25,11 +25,15 @@ export const REAUTH_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
 
 export const GENERIC_LOGIN_ERROR = "The email or password you entered is incorrect.";
 
+/** NIST-aligned minimum; passphrases and password-manager secrets are both valid. */
+export const MIN_PASSWORD_LENGTH = 12;
+export const MAX_PASSWORD_LENGTH = 256;
+
 const ACTIVITY_TOUCH_THROTTLE_MS = 15_000;
 let lastActivityTouchMs = 0;
 
 export function isPasswordStrongEnough(password: string) {
-  return password.length >= 8 && /[^A-Za-z0-9]/.test(password);
+  return password.length >= MIN_PASSWORD_LENGTH && password.length <= MAX_PASSWORD_LENGTH;
 }
 
 export function getAbsoluteSessionMs(remember: boolean) {

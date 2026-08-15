@@ -77,7 +77,7 @@ function createMockClient(
   return {
     from(table: string) {
       capture.tables.push(table);
-      const data = table === "designer_profiles" ? profiles : images;
+      const data = table === "marketplace_designers" || table === "designer_profiles" ? profiles : images;
       return createThenChain({ data, error: null }, capture);
     },
   };
@@ -132,15 +132,13 @@ describe("listPublicMarketplaceDesigners", () => {
       ) as never
     );
 
-    assert.deepEqual(capture.tables, ["designer_profiles", "portfolio_images"]);
+    assert.deepEqual(capture.tables, ["marketplace_designers", "portfolio_images"]);
     assert.equal(capture.selects[0], PUBLIC_DESIGNER_PROFILE_SELECT);
     assert.equal(capture.selects[0]?.includes("*"), false);
     assert.equal(capture.selects[0]?.includes("phone"), false);
+    assert.equal(capture.selects[0]?.includes("user_id"), false);
     assert.equal(capture.selects[0]?.includes("service_areas"), true);
-    assert.deepEqual(capture.eqs, [
-      ["marketplace_live", true],
-      ["is_public", true],
-    ]);
+    assert.deepEqual(capture.eqs, [["is_public", true]]);
     assert.deepEqual(capture.ins, [["designer_id", [profile.id]]]);
     assert.equal(designers.length, 1);
     assert.equal(designers[0]?.id, "1");
@@ -153,6 +151,6 @@ describe("listPublicMarketplaceDesigners", () => {
       createMockClient([], [], capture) as never
     );
     assert.deepEqual(designers, []);
-    assert.deepEqual(capture.tables, ["designer_profiles"]);
+    assert.deepEqual(capture.tables, ["marketplace_designers"]);
   });
 });

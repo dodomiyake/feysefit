@@ -1,9 +1,17 @@
-import { NextResponse, type NextRequest } from "next/server";
 import { getSessionFromCookies } from "@/server/auth";
 import type { SessionPayload } from "@/server/auth";
 import type { UserRole } from "@/lib/design-tokens";
 import { isApiEnabled } from "@/lib/config/backend";
 import { jsonError } from "@/server/http";
+
+export function legacyApiDisabledResponse() {
+  return jsonError("Not found", 404);
+}
+
+export function assertLegacyApiEnabled(): Response | null {
+  if (!isApiEnabled()) return legacyApiDisabledResponse();
+  return null;
+}
 
 export function isAuthError(result: SessionPayload | Response): result is Response {
   return result instanceof Response;

@@ -11,6 +11,7 @@ import {
   REMEMBER_COOKIE,
   toGenericLoginError,
 } from "@/lib/auth-security";
+import { runSensitiveHttpAction } from "@/lib/security/rate-limit";
 
 function createSupabase(request: NextRequest, response: NextResponse) {
   const remember = request.cookies.get(REMEMBER_COOKIE)?.value === "1";
@@ -134,34 +135,50 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({
-      factorId,
+    const gated = await runSensitiveHttpAction("authAbuse", user.id, async () => {
+      const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({
+        factorId,
+      });
+      if (challengeError) {
+        return { ok: false as const, status: 400, error: challengeError.message, mfaEnabled: true };
+      }
+      const { error: verifyError } = await supabase.auth.mfa.verify({
+        factorId,
+        challengeId: challenge.id,
+        code,
+      });
+      if (verifyError) {
+        return {
+          ok: false as const,
+          status: 401,
+          error: verifyError.message || "Invalid authenticator code.",
+          mfaEnabled: true,
+        };
+      }
+      return { ok: true as const };
     });
-    if (challengeError) {
-      return NextResponse.json({ ok: false, error: challengeError.message, mfaEnabled: true }, { status: 400 });
-    }
-    const { error: verifyError } = await supabase.auth.mfa.verify({
-      factorId,
-      challengeId: challenge.id,
-      code,
-    });
-    if (verifyError) {
+    if (!gated.ok) return gated.response;
+    if (!gated.value.ok) {
       return NextResponse.json(
-        { ok: false, error: verifyError.message || "Invalid authenticator code.", mfaEnabled: true },
-        { status: 401 }
+        { ok: false, error: gated.value.error, mfaEnabled: true },
+        { status: gated.value.status }
       );
     }
   } else {
     if (!password) {
       return NextResponse.json({ ok: false, error: "Password is required." }, { status: 400 });
     }
-    const { error } = await supabase.auth.signInWithPassword({
-      email: user.email,
-      password,
+    const gated = await runSensitiveHttpAction("authAbuse", user.id, async () => {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: user.email!,
+        password,
+      });
+      return error;
     });
-    if (error) {
+    if (!gated.ok) return gated.response;
+    if (gated.value) {
       return NextResponse.json(
-        { ok: false, error: toGenericLoginError(error.message) || GENERIC_LOGIN_ERROR },
+        { ok: false, error: toGenericLoginError(gated.value.message) || GENERIC_LOGIN_ERROR },
         { status: 401 }
       );
     }
