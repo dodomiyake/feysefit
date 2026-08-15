@@ -13,7 +13,7 @@
 - Follow-up 2 revokes authenticated `INSERT` on `avatars` and `designer-portfolios`. Direct Storage uploads cannot become public from spoofed `image/*` metadata.
 - Quarantine bucket `uploads-quarantine` is private.
 - **Storage-API cleanup:** `POST /auth/uploads/cleanup-quarantine` with `CRON_SECRET` removes expired objects through `storage.remove()` (counts only in logs).
-- **SQL `app_private.cleanup_quarantine_objects()`** deletes `storage.objects` catalog rows older than 24 hours. That does **not** purge Storage backend bytes. Residual risk until the Storage-API route is scheduled.
+- No SQL function deletes quarantine objects. Hosted Supabase blocks direct deletion from `storage.objects`; schedule the Storage-API route with `CRON_SECRET`.
 - Object names use `crypto.randomUUID()` rather than the original filename.
 - Storage RLS (`can_read_private_storage_object`, **EXECUTE** not SELECT) allows:
   - the object owner (first path segment = `auth.uid()`)
@@ -34,4 +34,4 @@ Message documents stay in the private `message-attachments` bucket with `Content
 
 Direct Storage uploads to remaining private buckets can still bypass re-encode. Those objects are not public. Public image buckets require the promote route after follow-up 2.
 
-SQL catalog deletes of quarantine rows can leave Storage backend bytes behind unless `POST /auth/uploads/cleanup-quarantine` is scheduled.
+Quarantine objects remain until `POST /auth/uploads/cleanup-quarantine` is scheduled. The route deletes through `storage.remove()` so catalog and backend bytes stay coordinated.
