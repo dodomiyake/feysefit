@@ -23,6 +23,10 @@ import {
   updateDesignerProfile,
 } from "@/lib/services/designerService";
 import {
+  DESIGNER_SERVICE_AREA_OPTIONS,
+  structuredDesignerStoryFields,
+} from "@/lib/designer-profile-fields";
+import {
   updateUserOnboardingState,
 } from "@/lib/services/onboardingService";
 import {
@@ -54,12 +58,7 @@ const CONTINUE_LABELS = [
   "Accept & Finish",
 ];
 
-const SERVICE_AREA_OPTIONS = [
-  "Local fittings",
-  "Nationwide delivery",
-  "International shipping",
-  "Virtual consultations",
-];
+const SERVICE_AREA_OPTIONS = DESIGNER_SERVICE_AREA_OPTIONS;
 
 const DELIVERY_OPTIONS = [
   { value: "in_person", label: "In-person appointments" },
@@ -175,12 +174,12 @@ export default function DesignerOnboardingPage() {
           profileUrl = await uploadAvatarImage(authUser.id, avatarImage.file);
         }
 
-        const bioParts = [
-          tagline.trim(),
-          bio.trim(),
-          phone.trim() ? `Contact: ${phone.trim()}` : "",
-          serviceAreas.length ? `Service areas: ${serviceAreas.join(", ")}` : "",
-        ].filter(Boolean);
+        const story = structuredDesignerStoryFields({
+          tagline,
+          bio,
+          phone,
+          serviceAreas,
+        });
         const parsedYears = yearsExperience.trim()
           ? Number.parseInt(yearsExperience, 10)
           : null;
@@ -189,7 +188,10 @@ export default function DesignerOnboardingPage() {
           designerName: designerName.trim() || authUser.name,
           location: location.trim(),
           specialty: category ? specialtyLabel(category) : undefined,
-          bio: bioParts.length ? bioParts.join("\n\n") : undefined,
+          bio: story.bio,
+          tagline: story.tagline,
+          phone: story.phone,
+          serviceAreas: story.serviceAreas,
           coverImage: coverUrl,
           profileImage: profileUrl,
           yearsExperience: Number.isFinite(parsedYears) ? parsedYears : null,

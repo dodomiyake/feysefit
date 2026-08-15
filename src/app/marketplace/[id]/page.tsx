@@ -3,12 +3,12 @@
 import { use, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AppShell } from "@/components/layout/AppShell";
-import { TopBar } from "@/components/layout/TopBar";
 import { DesignerProfileView } from "@/components/marketplace/DesignerProfileView";
 import { MarketplaceGate } from "@/components/customer/MarketplaceGate";
+import { MarketplaceAppShell } from "@/components/marketplace/MarketplaceAppShell";
 import { useApp } from "@/context/AppContext";
 import { LINKED_DESIGNER_PAGE_HREF } from "@/lib/customer-designer-links";
+import { marketplaceBackHref } from "@/lib/marketplace-display";
 
 export default function DesignerProfilePage({
   params,
@@ -17,10 +17,11 @@ export default function DesignerProfilePage({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const { canAccessMarketplace, customerLink, isDesignerMarketplaceLive, getDesignerById } =
+  const { canAccessMarketplace, customerLink, isDesignerMarketplaceLive, getDesignerById, role, marketplaceReady } =
     useApp();
   const designer = getDesignerById(id);
   const isOwnLinkedDesigner = customerLink.linkedDesignerId === id;
+  const backHref = marketplaceBackHref(role);
 
   useEffect(() => {
     if (!canAccessMarketplace && isOwnLinkedDesigner) {
@@ -30,10 +31,9 @@ export default function DesignerProfilePage({
 
   if (!canAccessMarketplace && !isOwnLinkedDesigner) {
     return (
-      <AppShell showMobileTopBar={false}>
-        <TopBar title="Designer Profile" showBack backHref="/dashboard/customer" />
+      <MarketplaceAppShell title="Designer Profile" backHref="/dashboard/customer">
         <MarketplaceGate>{null}</MarketplaceGate>
-      </AppShell>
+      </MarketplaceAppShell>
     );
   }
 
@@ -43,28 +43,32 @@ export default function DesignerProfilePage({
 
   if (!designer) {
     return (
-      <AppShell showMobileTopBar={false}>
-        <TopBar title="Designer Profile" showBack backHref="/marketplace" />
+      <MarketplaceAppShell title="Designer Profile" backHref="/marketplace">
         <div className="mx-auto max-w-lg px-5 py-16 text-center">
-          <h1 className="font-headline text-2xl font-bold text-primary">Designer not found</h1>
-          <p className="mt-3 text-sm text-primary/60">
-            This profile does not exist or may have been removed.
-          </p>
-          <Link
-            href="/marketplace"
-            className="mt-6 inline-block text-sm font-medium text-accent hover:underline"
-          >
-            Back to marketplace
-          </Link>
+          {marketplaceReady ? (
+            <>
+              <h1 className="font-headline text-2xl font-bold text-primary">Designer not found</h1>
+              <p className="mt-3 text-sm text-primary/60">
+                This profile does not exist or may have been removed.
+              </p>
+              <Link
+                href="/marketplace"
+                className="mt-6 inline-block text-sm font-medium text-accent hover:underline"
+              >
+                Back to marketplace
+              </Link>
+            </>
+          ) : (
+            <p className="text-sm text-primary/60">Loading designer profile...</p>
+          )}
         </div>
-      </AppShell>
+      </MarketplaceAppShell>
     );
   }
 
   if (!isDesignerMarketplaceLive(designer.id) && !isOwnLinkedDesigner) {
     return (
-      <AppShell showMobileTopBar={false}>
-        <TopBar title="Designer Profile" showBack backHref="/marketplace" />
+      <MarketplaceAppShell title="Designer Profile" backHref="/marketplace">
         <div className="mx-auto max-w-lg px-5 py-16 text-center">
           <h1 className="font-headline text-2xl font-bold text-primary">Profile unavailable</h1>
           <p className="mt-3 text-sm text-primary/60">
@@ -77,13 +81,13 @@ export default function DesignerProfilePage({
             Back to marketplace
           </Link>
         </div>
-      </AppShell>
+      </MarketplaceAppShell>
     );
   }
 
   return (
-    <AppShell showMobileTopBar={false}>
+    <MarketplaceAppShell title="Designer Profile" backHref={backHref} showSignedInTopBar={false}>
       <DesignerProfileView designer={designer} />
-    </AppShell>
+    </MarketplaceAppShell>
   );
 }

@@ -2,10 +2,9 @@
 
 import { use } from "react";
 import Link from "next/link";
-import { AppShell } from "@/components/layout/AppShell";
-import { TopBar } from "@/components/layout/TopBar";
 import { DesignerPortfolioGallery } from "@/components/marketplace/DesignerPortfolioGallery";
 import { MarketplaceGate } from "@/components/customer/MarketplaceGate";
+import { MarketplaceAppShell } from "@/components/marketplace/MarketplaceAppShell";
 import { useApp } from "@/context/AppContext";
 
 export default function DesignerPortfolioPage({
@@ -14,42 +13,48 @@ export default function DesignerPortfolioPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const { canAccessMarketplace, isDesignerMarketplaceLive, getDesignerById } = useApp();
+  const { canAccessMarketplace, isDesignerMarketplaceLive, getDesignerById, marketplaceReady } = useApp();
   const designer = getDesignerById(id);
 
   if (!canAccessMarketplace) {
     return (
-      <AppShell showMobileTopBar={false}>
-        <TopBar title="Collections" showBack backHref={designer ? `/marketplace/${designer.id}` : "/marketplace"} />
+      <MarketplaceAppShell
+        title="Collections"
+        backHref={designer ? `/marketplace/${designer.id}` : "/marketplace"}
+      >
         <MarketplaceGate>{null}</MarketplaceGate>
-      </AppShell>
+      </MarketplaceAppShell>
     );
   }
 
   if (!designer) {
     return (
-      <AppShell showMobileTopBar={false}>
-        <TopBar title="Collections" showBack backHref="/marketplace" />
+      <MarketplaceAppShell title="Collections" backHref="/marketplace">
         <div className="mx-auto max-w-lg px-5 py-16 text-center">
-          <h1 className="font-headline text-2xl font-bold text-primary">Designer not found</h1>
-          <p className="mt-3 text-sm text-primary/60">
-            This profile does not exist or may have been removed.
-          </p>
-          <Link
-            href="/marketplace"
-            className="mt-6 inline-block text-sm font-medium text-accent hover:underline"
-          >
-            Back to marketplace
-          </Link>
+          {marketplaceReady ? (
+            <>
+              <h1 className="font-headline text-2xl font-bold text-primary">Designer not found</h1>
+              <p className="mt-3 text-sm text-primary/60">
+                This profile does not exist or may have been removed.
+              </p>
+              <Link
+                href="/marketplace"
+                className="mt-6 inline-block text-sm font-medium text-accent hover:underline"
+              >
+                Back to marketplace
+              </Link>
+            </>
+          ) : (
+            <p className="text-sm text-primary/60">Loading designer profile...</p>
+          )}
         </div>
-      </AppShell>
+      </MarketplaceAppShell>
     );
   }
 
   if (!isDesignerMarketplaceLive(designer.id)) {
     return (
-      <AppShell showMobileTopBar={false}>
-        <TopBar title="Collections" showBack backHref="/marketplace" />
+      <MarketplaceAppShell title="Collections" backHref="/marketplace">
         <div className="mx-auto max-w-lg px-5 py-16 text-center">
           <h1 className="font-headline text-2xl font-bold text-primary">Gallery unavailable</h1>
           <p className="mt-3 text-sm text-primary/60">
@@ -62,13 +67,17 @@ export default function DesignerPortfolioPage({
             Back to marketplace
           </Link>
         </div>
-      </AppShell>
+      </MarketplaceAppShell>
     );
   }
 
   return (
-    <AppShell showMobileTopBar={false}>
+    <MarketplaceAppShell
+      title="Collections"
+      backHref={`/marketplace/${designer.id}`}
+      showSignedInTopBar={false}
+    >
       <DesignerPortfolioGallery designer={designer} />
-    </AppShell>
+    </MarketplaceAppShell>
   );
 }

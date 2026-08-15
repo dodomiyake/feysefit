@@ -334,6 +334,11 @@ alter table public.designer_profiles
 alter table public.designer_profiles
   add column if not exists updated_at timestamptz not null default now();
 
+alter table public.designer_profiles
+  add column if not exists phone text not null default '',
+  add column if not exists service_areas text[] not null default '{}'::text[],
+  add column if not exists tagline text not null default '';
+
 alter table public.customer_profiles
   add column if not exists legacy_id text;
 

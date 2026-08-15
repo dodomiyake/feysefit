@@ -20,7 +20,8 @@ import {
 } from "@/lib/settings-profile";
 import { isSupabaseEnabled } from "@/lib/config/backend";
 import { updateCustomerProfile } from "@/lib/services/customerService";
-import { updateDesignerProfile } from "@/lib/services/designerService";
+import { updateDesignerProfile, getOwnDesignerContact } from "@/lib/services/designerService";
+import { structuredDesignerStoryFields } from "@/lib/designer-profile-fields";
 import { updateUserProfile } from "@/lib/services/authService";
 import { resolveCurrentCustomer } from "@/lib/customer-display";
 import {
@@ -46,6 +47,8 @@ interface SettingsDraft {
   offersInPerson: boolean;
   priceRangeMin: string;
   priceRangeMax: string;
+  bio: string;
+  serviceAreas: string[];
   availability: DesignerAvailabilitySettings;
 }
 
@@ -101,15 +104,22 @@ export function SettingsContent() {
       customer?.phone ?? "",
       designer?.designerName ?? "",
       designer?.yearsExperience != null ? String(designer.yearsExperience) : "",
+      designer?.bio ?? "",
+      (designer?.serviceAreas ?? []).join("|"),
       designer?.offersInPersonAppointments ? "1" : "0",
     ].join("|");
   }, [authUser, customers, designerId, getDesignerById]);
 
   const designer = designerId ? getDesignerById(designerId) : null;
 
+  const [ownDesignerPhone, setOwnDesignerPhone] = useState("");
+
   const buildDraft = useCallback(
     (prefs?: UserPreferences, availability?: DesignerAvailabilitySettings): SettingsDraft => ({
-      profile: { ...savedProfile },
+      profile: {
+        ...savedProfile,
+        phone: isDesigner ? ownDesignerPhone || savedProfile.phone : savedProfile.phone,
+      },
       unit: prefs?.measurementUnit ?? measurementUnit,
       emailDigests: prefs?.emailDigests ?? true,
       pushAlerts: prefs?.pushAlerts ?? true,
@@ -121,13 +131,15 @@ export function SettingsContent() {
       offersInPerson: designer?.offersInPersonAppointments ?? false,
       priceRangeMin: designer?.priceRangeMin != null ? String(designer.priceRangeMin) : "",
       priceRangeMax: designer?.priceRangeMax != null ? String(designer.priceRangeMax) : "",
+      bio: designer?.bio ?? "",
+      serviceAreas: designer?.serviceAreas ?? [],
       availability: availability ?? {
         slotMinutes: designer?.appointmentSlotMinutes ?? 30,
         offeredMeetingModes: designer?.offeredMeetingModes ?? ["in_person", "video", "phone"],
         dates: [],
       },
     }),
-    [savedProfile, measurementUnit, liveMarketplaceVisible, designer]
+    [savedProfile, measurementUnit, liveMarketplaceVisible, designer, isDesigner, ownDesignerPhone]
   );
 
   const [draft, setDraft] = useState<SettingsDraft>(() => buildDraft());
@@ -173,6 +185,31 @@ export function SettingsContent() {
   }, [buildDraft, editingProfile, profileSyncKey]);
 
   useEffect(() => {
+    if (!isDesigner || !useSupabase) return;
+    let cancelled = false;
+    void getOwnDesignerContact()
+      .then((phone) => {
+        if (cancelled) return;
+        setOwnDesignerPhone(phone);
+        if (editingProfile) return;
+        setDraft((current) => ({
+          ...current,
+          profile: { ...current.profile, phone },
+        }));
+        setSavedSnapshot((current) => ({
+          ...current,
+          profile: { ...current.profile, phone },
+        }));
+      })
+      .catch(() => {
+        // Phone column may be missing until the contact/service-areas patch is applied.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [designerId, editingProfile, isDesigner, useSupabase]);
+
+  useEffect(() => {
     if (!isDesigner || !designerId) return;
     let cancelled = false;
     void getDesignerAvailability(designerId).then((availability) => {
@@ -197,7 +234,7 @@ export function SettingsContent() {
 
       try {
         const phoneChanged =
-          isCustomer &&
+          (isCustomer || isDesigner) &&
           draft.profile.phone.trim() !== savedSnapshot.profile.phone.trim();
         if (phoneChanged) {
           const ok = await ensureReauth({ purpose: "change your phone number" });
@@ -217,6 +254,13 @@ export function SettingsContent() {
             const yearsExperience = draft.profile.yearsExperience?.trim()
               ? Number.parseInt(draft.profile.yearsExperience, 10)
               : null;
+            const story = structuredDesignerStoryFields({
+              bio: draft.bio,
+              phone: draft.profile.phone,
+              serviceAreas: draft.serviceAreas,
+              tagline: designer?.tagline ?? "",
+            });
+            setOwnDesignerPhone(story.phone);
             await updateDesignerProfile(designerId, {
               designerName: draft.profile.fullName,
               specialty: draft.profile.professionalRole,
@@ -228,6 +272,10 @@ export function SettingsContent() {
               priceRangeMin: Number.isFinite(priceMin) ? priceMin : null,
               priceRangeMax: Number.isFinite(priceMax) ? priceMax : null,
               yearsExperience: Number.isFinite(yearsExperience) ? yearsExperience : null,
+              bio: story.bio,
+              phone: story.phone,
+              serviceAreas: story.serviceAreas,
+              tagline: story.tagline,
             });
             savedAvailability = await saveDesignerAvailability(designerId, draft.availability);
             setDesignerMarketplaceVisibility(designerId, draft.marketplaceVisible);
@@ -320,7 +368,7 @@ export function SettingsContent() {
           onEdit={() => setEditingProfile(true)}
           onChange={(profile) => setDraft((current) => ({ ...current, profile }))}
           variant={isAdmin ? "admin" : "default"}
-          showPhone={isCustomer}
+          showPhone={isCustomer || isDesigner}
           showYearsExperience={isDesigner}
         />
 
@@ -348,6 +396,8 @@ export function SettingsContent() {
             offersInPerson={draft.offersInPerson}
             priceRangeMin={draft.priceRangeMin}
             priceRangeMax={draft.priceRangeMax}
+            bio={draft.bio}
+            serviceAreas={draft.serviceAreas}
             onCityChange={(studioCity) => setDraft((current) => ({ ...current, studioCity }))}
             onCountryChange={(studioCountry) =>
               setDraft((current) => ({ ...current, studioCountry }))
@@ -360,6 +410,10 @@ export function SettingsContent() {
             }
             onPriceRangeMaxChange={(priceRangeMax) =>
               setDraft((current) => ({ ...current, priceRangeMax }))
+            }
+            onBioChange={(bio) => setDraft((current) => ({ ...current, bio }))}
+            onServiceAreasChange={(serviceAreas) =>
+              setDraft((current) => ({ ...current, serviceAreas }))
             }
           />
         )}

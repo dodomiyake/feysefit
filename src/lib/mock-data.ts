@@ -70,6 +70,9 @@ export interface Designer {
   location: string;
   specialty: string;
   bio: string;
+  tagline?: string;
+  serviceAreas?: string[];
+  phone?: string;
   rating: number;
   reviewCount: number;
   portfolioImages: string[];
@@ -124,6 +127,8 @@ export const designers: Designer[] = [
     location: "Lagos, Nigeria",
     specialty: "Aso-ebi & Bridal",
     bio: "Specialising in bespoke aso-ebi coordination and luxury bridal gowns for diaspora weddings. Over 12 years crafting memorable occasion wear.",
+    tagline: "Precision is a love language.",
+    serviceAreas: ["Local fittings", "International shipping"],
     city: "Lagos",
     country: "Nigeria",
     offersInPersonAppointments: true,
@@ -147,6 +152,7 @@ export const designers: Designer[] = [
     location: "London, UK",
     specialty: "Menswear & Kaftans",
     bio: "Contemporary African menswear blending traditional kente with modern tailoring for UK and international clients.",
+    serviceAreas: ["Nationwide delivery", "Virtual consultations"],
     city: "London",
     country: "UK",
     offersInPersonAppointments: true,
@@ -169,6 +175,7 @@ export const designers: Designer[] = [
     location: "Toronto, Canada",
     specialty: "Occasion Wear & Gowns",
     bio: "Elegant occasion wear and custom gowns for weddings, galas, and cultural celebrations across North America.",
+    serviceAreas: ["Local fittings", "Virtual consultations"],
     rating: 4.7,
     reviewCount: 28,
     yearsExperience: 10,

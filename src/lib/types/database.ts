@@ -88,6 +88,9 @@ export interface Database {
           years_experience: number | null;
           appointment_slot_minutes: number;
           offered_meeting_modes: string[];
+          phone: string;
+          service_areas: string[];
+          tagline: string;
           created_at: string;
           updated_at: string;
         };

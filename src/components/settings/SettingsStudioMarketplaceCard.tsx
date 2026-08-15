@@ -1,6 +1,8 @@
 "use client";
 
 import { MapPin, Store } from "lucide-react";
+import { DESIGNER_SERVICE_AREA_OPTIONS } from "@/lib/designer-profile-fields";
+import { cn } from "@/lib/cn";
 
 interface SettingsStudioMarketplaceCardProps {
   city: string;
@@ -8,11 +10,15 @@ interface SettingsStudioMarketplaceCardProps {
   offersInPerson: boolean;
   priceRangeMin: string;
   priceRangeMax: string;
+  bio: string;
+  serviceAreas: string[];
   onCityChange: (value: string) => void;
   onCountryChange: (value: string) => void;
   onOffersInPersonChange: (value: boolean) => void;
   onPriceRangeMinChange: (value: string) => void;
   onPriceRangeMaxChange: (value: string) => void;
+  onBioChange: (value: string) => void;
+  onServiceAreasChange: (value: string[]) => void;
 }
 
 const fieldClass =
@@ -24,11 +30,15 @@ export function SettingsStudioMarketplaceCard({
   offersInPerson,
   priceRangeMin,
   priceRangeMax,
+  bio,
+  serviceAreas,
   onCityChange,
   onCountryChange,
   onOffersInPersonChange,
   onPriceRangeMinChange,
   onPriceRangeMaxChange,
+  onBioChange,
+  onServiceAreasChange,
 }: SettingsStudioMarketplaceCardProps) {
   return (
     <section className="rounded-xl border border-[#d3c3ba]/20 bg-surface-container p-6 shadow-warm lg:col-span-8 lg:p-8">
@@ -40,8 +50,8 @@ export function SettingsStudioMarketplaceCard({
           <h3 className="text-lg font-semibold text-primary">Studio & marketplace</h3>
           <p className="mt-1 text-sm text-primary/60">
             Help local and diaspora clients find you. City, country, and price range power marketplace
-            filters. When in-person appointments are enabled, app clients can request visits from your
-            marketplace profile. Click <span className="font-medium text-primary">Save Changes</span> at
+            filters. Biography and service areas appear on your public profile. Phone/contact stays
+            private. Click <span className="font-medium text-primary">Save Changes</span> at
             the bottom of this page to keep updates.
           </p>
         </div>
@@ -93,6 +103,45 @@ export function SettingsStudioMarketplaceCard({
             className={fieldClass}
           />
         </label>
+      </div>
+
+      <label className="mt-5 block text-sm">
+        <span className="mb-1 block text-primary/60">Biography</span>
+        <textarea
+          value={bio}
+          onChange={(e) => onBioChange(e.target.value)}
+          rows={5}
+          placeholder="Tell clients about your craft, experience, and style..."
+          className={fieldClass}
+        />
+      </label>
+
+      <div className="mt-5 space-y-2">
+        <p className="text-sm text-primary/60">Service areas</p>
+        <div className="flex flex-wrap gap-2">
+          {DESIGNER_SERVICE_AREA_OPTIONS.map((area) => {
+            const active = serviceAreas.includes(area);
+            return (
+              <button
+                key={area}
+                type="button"
+                onClick={() =>
+                  onServiceAreasChange(
+                    active ? serviceAreas.filter((item) => item !== area) : [...serviceAreas, area]
+                  )
+                }
+                className={cn(
+                  "rounded-full border px-4 py-2 text-sm transition-colors",
+                  active
+                    ? "border-accent bg-accent/15 text-primary"
+                    : "border-primary/15 text-primary/70 hover:bg-surface"
+                )}
+              >
+                {area}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <label className="mt-5 flex cursor-pointer items-center gap-3 rounded-lg border border-primary/10 bg-background/50 px-4 py-3">

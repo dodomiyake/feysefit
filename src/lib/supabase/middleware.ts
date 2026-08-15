@@ -18,12 +18,16 @@ import {
   REAUTH_COOKIE,
   REMEMBER_COOKIE,
   SESSION_STARTED_COOKIE,
+  isSupabaseAuthCookie,
 } from "@/lib/auth-security";
 
 const AUTH_REFRESH_TIMEOUT_MS = 4_000;
 
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  // If we time out, the original fetch may still reject later. Attach a no-op
+  // catch so that rejection cannot crash the Next.js request (Failed to fetch).
+  void promise.catch(() => undefined);
   try {
     return await Promise.race([
       promise,
@@ -140,6 +144,16 @@ export async function updateSession(request: NextRequest) {
 
   if (!requiresAuth && !isVerifyEmailRoute) {
     return NextResponse.next({ request });
+  }
+
+  const hasSessionCookie = request.cookies.getAll().some((cookie) => isSupabaseAuthCookie(cookie.name));
+  if (!hasSessionCookie) {
+    if (!requiresAuth) return NextResponse.next({ request });
+    return redirectWithCookies(
+      request,
+      NextResponse.next({ request }),
+      loginPathForRequirement(pathname, requirement)
+    );
   }
 
   const rememberPreferred = request.cookies.get(REMEMBER_COOKIE)?.value === "1";
@@ -329,6 +343,7 @@ export async function updateSession(request: NextRequest) {
         loginPathForRequirement(pathname, requirement)
       );
     }
+    return NextResponse.next({ request });
   }
 
   return supabaseResponse;

@@ -46,6 +46,7 @@ import {
 } from "@/context/supabase-bridge";
 import * as supabaseServices from "@/lib/services";
 import { getUserPreferences } from "@/lib/services/preferenceService";
+import { logDevSupabaseError } from "@/lib/supabase-errors";
 import {
   PROJECTS_STORAGE_KEY,
   PROJECTS_UPDATED_EVENT,
@@ -105,6 +106,8 @@ interface AppContextValue {
   getDesignerPendingConfirmations: () => UnlinkRequest[];
   projects: Project[];
   projectsReady: boolean;
+  marketplaceReady: boolean;
+  marketplaceError: boolean;
   designers: Designer[];
   customers: Customer[];
   getDesignerById: (id: string) => Designer | undefined;
@@ -241,6 +244,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
   const [projects, setProjects] = useState<Project[]>(() => (useRemote ? [] : seedProjects));
   const [projectsReady, setProjectsReady] = useState(false);
+  const [marketplaceReady, setMarketplaceReady] = useState(!useRemote);
+  const [marketplaceError, setMarketplaceError] = useState(false);
   const [appDesigners, setAppDesigners] = useState<Designer[]>(() => (useRemote ? [] : seedDesigners));
   const [appCustomers, setAppCustomers] = useState<Customer[]>(() => (useRemote ? [] : seedCustomers));
   const [hydrated, setHydrated] = useState(false);
@@ -318,6 +323,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setTestimonials(data.testimonials);
           setTestimonialReports(data.testimonialReports);
           setDeliveryIssues(data.deliveryIssues);
+          setMarketplaceError(false);
+          setMarketplaceReady(true);
           setAppDataRevision((revision) => revision + 1);
           if (activeUser?.id) {
             try {
@@ -328,7 +335,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             }
           }
         } catch (error) {
-          console.error("Failed to refresh Supabase app data", error);
+          logDevSupabaseError("Failed to refresh Supabase app data", error);
+          setMarketplaceError(true);
+          setMarketplaceReady(true);
         }
         return;
       }
@@ -349,6 +358,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             // Local studio tables may not exist until patch is applied.
           }
         }
+        setMarketplaceError(false);
+        setMarketplaceReady(true);
         return;
       }
 
@@ -371,6 +382,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setMarketplaceApprovals(approvals);
         setLiveMarketplaceDesignerIds(liveIds);
         setUserReports([]);
+        setMarketplaceError(false);
+        setMarketplaceReady(true);
 
         const customerId = user?.customerId ?? authUser?.customerId;
         if (customerId) {
@@ -379,11 +392,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
         setAppDataRevision((revision) => revision + 1);
       } catch (error) {
-        console.error("Failed to refresh app data", error);
+        logDevSupabaseError("Failed to refresh app data", error);
+        setMarketplaceError(true);
+        setMarketplaceReady(true);
       }
     },
     [useApi, useSupabase, authUser?.customerId]
   );
+
+  const loadPublicMarketplaceData = useCallback(async () => {
+    if (!useSupabase) {
+      setMarketplaceError(false);
+      setMarketplaceReady(true);
+      return;
+    }
+
+    setMarketplaceReady(false);
+    setMarketplaceError(false);
+    try {
+      const designers = await supabaseServices.listPublicMarketplaceDesigners();
+      setAppDesigners(designers);
+      setLiveMarketplaceDesignerIds(designers.map((designer) => designer.id));
+      setMarketplaceError(false);
+    } catch (error) {
+      logDevSupabaseError("Failed to load public marketplace", error);
+      setMarketplaceError(true);
+    } finally {
+      setMarketplaceReady(true);
+    }
+  }, [useSupabase]);
 
   useEffect(() => {
     if (useSupabase) {
@@ -394,9 +431,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (user) {
             setRoleState(user.role);
             void refreshAppData(user);
+          } else {
+            void loadPublicMarketplaceData();
           }
         } catch {
-          // Supabase unavailable
+          void loadPublicMarketplaceData();
         } finally {
           setHydrated(true);
         }
@@ -438,7 +477,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (storedRole) setRoleState(storedRole);
       setHydrated(true);
     });
-  }, [useApi, useSupabase, syncProjects, refreshAppData]);
+  }, [useApi, useSupabase, syncProjects, refreshAppData, loadPublicMarketplaceData]);
 
   useEffect(() => {
     if (!useSupabase) return;
@@ -453,6 +492,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setRoleState(user?.role ?? null);
           if (user) {
             await refreshAppData(user);
+          } else {
+            await loadPublicMarketplaceData();
           }
         } catch {
           // Ignore transient auth/network errors during session refresh.
@@ -460,7 +501,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       })();
     });
     return () => subscription.unsubscribe();
-  }, [useSupabase, refreshAppData]);
+  }, [useSupabase, refreshAppData, loadPublicMarketplaceData]);
 
   useEffect(() => {
     const onProjectsUpdated = () => syncProjects();
@@ -581,7 +622,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setRoleState(null);
     setCustomerLink(initialCustomerLinkState);
     clearSessionStorage();
-  }, [useApi, useSupabase]);
+    setProjects([]);
+    setAppCustomers([]);
+    setUnlinkRequests([]);
+    setMarketplaceApprovals([]);
+    setUserReports([]);
+    setStudioClients([]);
+    setAppointments([]);
+    setGroupProjects([]);
+    setTestimonials([]);
+    setTestimonialReports([]);
+    setDeliveryIssues([]);
+    void loadPublicMarketplaceData();
+  }, [useApi, useSupabase, loadPublicMarketplaceData]);
 
   const linkCustomerToDesigner = useCallback(
     (designerId: string, options?: { source?: "invite" | "marketplace" }) => {
@@ -1486,6 +1539,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         getDesignerPendingConfirmations,
         projects,
         projectsReady,
+        marketplaceReady,
+        marketplaceError,
         designers: appDesigners,
         customers: appCustomers,
         getDesignerById,
