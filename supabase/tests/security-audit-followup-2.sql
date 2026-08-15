@@ -180,13 +180,13 @@ begin
   raise notice 'PASS: unscoped and cross-project storage reads';
 end $$;
 
-do $
+do $cleanup_assertions$
 begin
   perform app_private.cleanup_rate_limit_counters();
   if to_regprocedure('app_private.cleanup_quarantine_objects()') is not null then
     raise exception 'FAIL: SQL quarantine cleanup must not exist; use the Storage API';
   end if;
   raise notice 'PASS: database cleanup runs and quarantine cleanup is Storage API only';
-end $;
+end $cleanup_assertions$;
 
 rollback;
