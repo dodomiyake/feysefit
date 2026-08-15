@@ -676,7 +676,7 @@ alter default privileges for role postgres in schema public
 alter default privileges for role postgres in schema public
   revoke all on functions from public, anon, authenticated;
 
-do $
+do $managed_default_privileges$
 begin
   if exists (select 1 from pg_roles where rolname = 'supabase_admin') then
     begin
@@ -697,7 +697,7 @@ begin
         raise notice 'Cannot alter managed supabase_admin default privileges as %; existing object grants and postgres defaults remain hardened', current_user;
     end;
   end if;
-end $;
+end $managed_default_privileges$;
 
 -- ---------------------------------------------------------------------------
 -- RLS: force where compatible; keep rate_limit_counters owner-only
