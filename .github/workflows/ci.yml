@@ -166,5 +166,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/ci-bootstrap.sql
           psql -v ON_ERROR_STOP=1 -f supabase/patch-security-audit-followup.sql
           psql -v ON_ERROR_STOP=1 -f supabase/patch-security-audit-followup-2.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/patch-security-audit-followup-3.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/security-audit-followup.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/security-audit-followup-2.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/security-audit-followup-3.sql
