@@ -104,7 +104,7 @@ language sql
 stable
 security definer
 set search_path = pg_catalog, public
-as $ select null::uuid $;
+as $current_customer$ select null::uuid $current_customer$;
 
 create or replace function public.current_user_role()
 returns text
@@ -112,7 +112,7 @@ language sql
 stable
 security definer
 set search_path = pg_catalog, public
-as $ select null::text $;
+as $current_role$ select null::text $current_role$;
 
 create table if not exists public.users (
   id uuid primary key,
@@ -138,10 +138,10 @@ create table if not exists public.designer_profiles (
 );
 alter table public.designer_profiles enable row level security;
 
-do $ begin
+do $marketplace_enum$ begin
   create type public.marketplace_status as enum ('pending', 'approved', 'declined');
 exception when duplicate_object then null;
-end $;
+end $marketplace_enum$;
 
 create table if not exists public.marketplace_listings (
   id uuid primary key default gen_random_uuid(),
