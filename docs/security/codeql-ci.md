@@ -7,7 +7,10 @@ alerts from these runs.
 
 CI still runs CodeQL (`javascript-typescript`). SARIF is **not** uploaded to
 GitHub Code Scanning (`upload: never`, `upload-database: false`). The SARIF
-files are stored as the **`codeql-sarif` workflow artifact**.
+files are stored as the **`codeql-sarif` workflow artifact**. The CodeQL job
+uses `actions: read` (not `security-events: write`) so fingerprinting can
+call the workflow-run API on this private repository. Pull request write
+permissions are not granted.
 
 `.github/scripts/codeql-sarif-gate.sh` then fails the job on high/critical
 results:
