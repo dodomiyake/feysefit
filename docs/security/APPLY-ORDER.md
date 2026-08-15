@@ -47,7 +47,7 @@ Then, in a **staging** SQL editor, entire files from line 1:
 1. Optional read-only check: `supabase/tests/staging-preflight.sql`
 2. If the first hardening pass is not on this project, apply those four files.
 3. `supabase/patch-security-audit-followup.sql` (additive follow-up from the second audit)
-4. `supabase/patch-security-audit-followup-2.sql` (account-activity EXECUTE, scheduled cleanup, public-image INSERT revoke). This file **raises** if `app_private` or `consume_rate_limit_server` from follow-up 1 are missing.
+4. `supabase/patch-security-audit-followup-2.sql` (account-activity EXECUTE, database cleanup, public-image INSERT revoke). This file **raises** if `app_private` or `consume_rate_limit_server` from follow-up 1 are missing. Quarantine objects are deleted through the Storage API endpoint, never direct SQL.\n5. `supabase/patch-security-audit-followup-3.sql` (authenticated-only helper policies and anonymous marketplace reads).
 
 Limiter for the application is now:
 
@@ -61,8 +61,7 @@ select to_regprocedure('public.consume_rate_limit_server(text,text)');
 
 1. `supabase/tests/security-hardening.sql` (staging only; ends in `ROLLBACK`)
 2. `supabase/tests/security-audit-followup.sql` (staging only; ends in `ROLLBACK`)
-3. `supabase/tests/security-audit-followup-2.sql` (staging only; ends in `ROLLBACK`)
-4. Counts-only unscoped inventory: `supabase/tests/unscoped-storage-inventory.sql` (no filenames)
+3. `supabase/tests/security-audit-followup-2.sql` (staging only; ends in `ROLLBACK`)\n4. `supabase/tests/security-audit-followup-3.sql` (staging only; ends in `ROLLBACK`)\n5. Counts-only unscoped inventory: `supabase/tests/unscoped-storage-inventory.sql` (no filenames)
 5. Grant boundary — all five must be `false`:
 
 ```sql
@@ -128,9 +127,7 @@ Follow-up 2 registers `pg_cron` jobs when the extension exists. Absence of `pg_c
 
 - `feysefit-cleanup-rate-limits` — `app_private.cleanup_rate_limit_counters()` every hour at minute 15
 - `feysefit-cleanup-security-logs` — `app_private.cleanup_security_logs()` daily
-- `feysefit-cleanup-quarantine` — quarantine **catalog** rows older than 24 hours (`storage.objects` only)
-
-Catalog-row cleanup is not a Storage byte purge. Schedule `POST /auth/uploads/cleanup-quarantine` with `CRON_SECRET` to delete objects through the Storage API. See `docs/security/storage-uploads.md`.
+Quarantine cleanup is intentionally **not** a SQL cron job. Hosted Supabase blocks direct deletion from `storage.objects`. Schedule `POST /auth/uploads/cleanup-quarantine` with `CRON_SECRET` so deletion runs through the Storage API. See `docs/security/storage-uploads.md`.
 
 If `pg_cron` is not enabled, those SQL jobs are skipped and must be scheduled after the extension is turned on. See also `docs/security/turnstile-gothrue.md` and `docs/security/jspdf-dompurify.md`.
 
