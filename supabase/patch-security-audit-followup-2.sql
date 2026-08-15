@@ -129,31 +129,11 @@ end $$;
 -- Scheduled cleanup (pg_cron when available). A defined-but-never-run
 -- function is not sufficient; this registers jobs when the extension exists.
 -- ---------------------------------------------------------------------------
--- Catalog-row cleanup only. Deleting storage.objects does not purge Storage
--- backend bytes. Object bytes are removed by POST /auth/uploads/cleanup-quarantine
--- (service-role Storage API). See docs/security/storage-uploads.md.
-create or replace function app_private.cleanup_quarantine_objects()
-returns integer
-language plpgsql
-security definer
-set search_path = pg_catalog, storage, public
-as $$
-declare
-  v_deleted integer := 0;
-begin
-  if to_regclass('storage.objects') is null then
-    return 0;
-  end if;
-  delete from storage.objects
-  where bucket_id = 'uploads-quarantine'
-    and coalesce(created_at, updated_at, now()) < clock_timestamp() - interval '24 hours';
-  get diagnostics v_deleted = row_count;
-  return v_deleted;
-end;
-$$;
-
-revoke all on function app_private.cleanup_quarantine_objects() from public, anon, authenticated;
-grant execute on function app_private.cleanup_quarantine_objects() to postgres, service_role;
+-- Quarantine object deletion must use the Storage API. Hosted Supabase blocks
+-- direct DELETE statements against storage.objects. The application endpoint
+-- POST /auth/uploads/cleanup-quarantine performs the byte and catalog removal.
+-- Do not create or schedule a SQL quarantine cleanup function.
+drop function if exists app_private.cleanup_quarantine_objects();
 
 do $$
 begin
@@ -175,11 +155,6 @@ begin
       'feysefit-cleanup-security-logs',
       '20 4 * * *',
       $cmd$select app_private.cleanup_security_logs()$cmd$
-    );
-    perform cron.schedule(
-      'feysefit-cleanup-quarantine',
-      '30 * * * *',
-      $cmd$select app_private.cleanup_quarantine_objects()$cmd$
     );
   else
     raise notice 'pg_cron not installed; schedule cleanup jobs after enabling the extension';
