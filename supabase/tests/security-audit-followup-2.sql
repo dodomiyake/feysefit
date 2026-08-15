@@ -4,6 +4,18 @@
 
 begin;
 
+-- Real Supabase enforces public.users -> auth.users. Create disposable auth
+-- identities without firing the signup trigger; the enclosing transaction rolls
+-- back every fixture.
+set local session_replication_role = replica;
+insert into auth.users (id, email, raw_user_meta_data, created_at, updated_at)
+values
+  ('11111111-1111-4111-8111-111111111111', 'd@example.test', '{}'::jsonb, now(), now()),
+  ('22222222-2222-4222-8222-222222222222', 'a@example.test', '{}'::jsonb, now(), now()),
+  ('33333333-3333-4333-8333-333333333333', 'b@example.test', '{}'::jsonb, now(), now())
+on conflict (id) do nothing;
+set local session_replication_role = origin;
+
 do $$
 begin
   if has_function_privilege('anon', 'public.log_account_activity(text,text,text,text,jsonb)', 'EXECUTE') then
@@ -104,32 +116,32 @@ begin
     (customer_b_user, 'b@example.test', 'Customer B', 'customer')
   on conflict (id) do nothing;
 
-  insert into public.designer_profiles (user_id, designer_name)
-  values (designer_user, 'Studio')
+  insert into public.designer_profiles (user_id, designer_name, business_name)
+  values (designer_user, 'Studio', 'Studio')
   returning id into designer_id;
   if designer_id is null then
     select id into designer_id from public.designer_profiles where user_id = designer_user limit 1;
   end if;
 
-  insert into public.customer_profiles (user_id, email)
-  values (customer_a_user, 'a@example.test')
+  insert into public.customer_profiles (user_id, email, name)
+  values (customer_a_user, 'a@example.test', 'Customer A')
   returning id into customer_a;
   if customer_a is null then
     select id into customer_a from public.customer_profiles where user_id = customer_a_user limit 1;
   end if;
 
-  insert into public.customer_profiles (user_id, email)
-  values (customer_b_user, 'b@example.test')
+  insert into public.customer_profiles (user_id, email, name)
+  values (customer_b_user, 'b@example.test', 'Customer B')
   returning id into customer_b;
   if customer_b is null then
     select id into customer_b from public.customer_profiles where user_id = customer_b_user limit 1;
   end if;
 
-  insert into public.projects (customer_id, designer_id, status)
-  values (customer_a, designer_id, 'In Progress')
+  insert into public.projects (project_code, title, customer_name, customer_id, designer_id, outfit_type, deadline, budget, status)
+  values ('TEST-A', 'Test A', 'Customer A', customer_a, designer_id, 'Test', current_date, 0, 'In Production')
   returning id into project_a;
-  insert into public.projects (customer_id, designer_id, status)
-  values (customer_b, designer_id, 'In Progress')
+  insert into public.projects (project_code, title, customer_name, customer_id, designer_id, outfit_type, deadline, budget, status)
+  values ('TEST-B', 'Test B', 'Customer B', customer_b, designer_id, 'Test', current_date, 0, 'In Production')
   returning id into project_b;
 
   insert into public.designer_customer_relationships (designer_id, customer_id, is_active)
@@ -168,11 +180,13 @@ begin
   raise notice 'PASS: unscoped and cross-project storage reads';
 end $$;
 
-do $$
+do $
 begin
   perform app_private.cleanup_rate_limit_counters();
-  perform app_private.cleanup_quarantine_objects();
-  raise notice 'PASS: cleanup functions execute';
-end $$;
+  if to_regprocedure('app_private.cleanup_quarantine_objects()') is not null then
+    raise exception 'FAIL: SQL quarantine cleanup must not exist; use the Storage API';
+  end if;
+  raise notice 'PASS: database cleanup runs and quarantine cleanup is Storage API only';
+end $;
 
 rollback;
