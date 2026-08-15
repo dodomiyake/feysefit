@@ -19,6 +19,7 @@ begin
         or position('current_designer_profile_id' in coalesce(qual, '') || coalesce(with_check, '')) > 0
         or position('current_user_role' in coalesce(qual, '') || coalesce(with_check, '')) > 0
         or position('is_admin()' in coalesce(qual, '') || coalesce(with_check, '')) > 0
+        or position('auth.uid()' in coalesce(qual, '') || coalesce(with_check, '')) > 0
       )
       and not (
         tablename = 'designer_profiles'
