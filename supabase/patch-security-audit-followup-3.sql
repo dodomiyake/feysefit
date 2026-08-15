@@ -114,14 +114,14 @@ using (
   )
 );
 
+revoke execute on function public.current_customer_profile_id() from public, anon;
+revoke execute on function public.current_designer_profile_id() from public, anon;
+revoke execute on function public.current_user_role() from public, anon;
+revoke execute on function public.is_admin() from public, anon;
+
 grant execute on function public.current_customer_profile_id() to authenticated;
 grant execute on function public.current_designer_profile_id() to authenticated;
 grant execute on function public.current_user_role() to authenticated;
 grant execute on function public.is_admin() to authenticated;
-
-revoke execute on function public.current_customer_profile_id() from anon;
-revoke execute on function public.current_designer_profile_id() from anon;
-revoke execute on function public.current_user_role() from anon;
-revoke execute on function public.is_admin() from anon;
 
 commit;
