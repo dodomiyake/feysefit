@@ -4,6 +4,7 @@ import { AppProvider } from "@/context/AppContext";
 import { ReauthProvider } from "@/context/ReauthContext";
 import { Toast } from "@/components/ui/Toast";
 import "./globals.css";
+import "./landing-page.css";
 
 const playfair = Playfair_Display({
   variable: "--font-playfair",
