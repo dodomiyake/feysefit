@@ -333,3 +333,36 @@ alter table storage.objects add column if not exists created_at timestamptz defa
 alter table storage.objects add column if not exists updated_at timestamptz default now();
 grant update (rating, review_count, marketplace_live) on table public.designer_profiles to authenticated;
 grant truncate, trigger, references on table public.designer_profiles to anon, authenticated;
+
+-- Minimal read-only marketplace views used only by disposable SQL assertions.
+create or replace view public.marketplace_designers
+with (security_invoker = true)
+as
+select *
+from (
+  select d.id, d.business_name
+  from public.designer_profiles d
+  where d.marketplace_live = true
+    and exists (
+      select 1
+      from public.marketplace_listings ml
+      where ml.designer_id = d.id
+        and ml.status = 'approved'
+    )
+  offset 0
+) public_rows;
+
+create or replace view public.marketplace_testimonials
+with (security_invoker = true)
+as
+select *
+from (
+  select t.id, t.designer_id
+  from public.testimonials t
+  where t.allow_public = true
+    and t.status = 'active'
+  offset 0
+) public_rows;
+
+grant select on public.marketplace_designers to anon, authenticated;
+grant select on public.marketplace_testimonials to anon, authenticated;
