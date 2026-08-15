@@ -39,6 +39,25 @@ begin
   end loop;
 end $$;
 
+-- SECURITY INVOKER views require underlying column privileges. Grant only
+-- columns present in the public projections or required by their predicates.
+grant select (
+  id, legacy_id, business_name, designer_name, location, specialty, bio,
+  tagline, rating, review_count, cover_image, profile_image, city, country,
+  offers_in_person, price_range_min, price_range_max, years_experience,
+  appointment_slot_minutes, offered_meeting_modes, service_areas, created_at,
+  marketplace_live
+) on public.designer_profiles to anon;
+
+grant select (designer_id, status)
+  on public.marketplace_listings to anon;
+
+grant select (
+  id, legacy_id, designer_id, rating, body, outfit_type, photo_url,
+  allow_public, show_name, show_location, display_name, display_location,
+  status, created_at, updated_at
+) on public.testimonials to anon;
+
 drop policy if exists designer_profiles_public_read_live
   on public.designer_profiles;
 create policy designer_profiles_public_read_live
