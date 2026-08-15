@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Plus, Shirt } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -74,12 +74,13 @@ export function ProjectItemsCard({
   const { showToast, refreshAppData } = useApp();
   const useSupabase = isSupabaseEnabled();
   const [items, setItems] = useState<ProjectItem[]>(project.items ?? []);
+  const [itemsProjectId, setItemsProjectId] = useState(project.id);
+  if (project.id !== itemsProjectId) {
+    setItemsProjectId(project.id);
+    setItems(project.items ?? []);
+  }
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState<ProjectItemInput>(createEmptyProjectItemDraft());
-
-  useEffect(() => {
-    setItems(project.items ?? []);
-  }, [project.id, project.items]);
 
   const progressLabel = formatAggregateProgressLabel(items);
   const progressPercent = aggregateProjectProgressPercent(items);

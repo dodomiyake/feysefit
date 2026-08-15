@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { legacyOrIdFilter } from "@/lib/legacy-id-lookup";
 import type { UserReport } from "@/lib/admin-reports";
-import { runSensitiveAction } from "@/lib/security/sensitive-rate-limit";
 
 type ReportRow = {
   id: string;
@@ -107,9 +106,7 @@ export async function dismissReport(reportKey: string) {
   if (!report) throw new Error("Report not found");
 
   const supabase = createClient();
-  const { error } = await runSensitiveAction("adminMutation", report.id, () =>
-    supabase.from("reports").update({ status: "dismissed" }).eq("id", report.id)
-  );
+  const { error } = await supabase.from("reports").update({ status: "dismissed" }).eq("id", report.id);
   if (error) throw new Error(error.message);
 }
 
@@ -125,7 +122,6 @@ async function setReportedUserAccountStatus(
   const reportedUserId = report.reported_user_id;
 
   const supabase = createClient();
-  await runSensitiveAction("adminMutation", reportedUserId, async () => {
     const { error: userError } = await supabase
       .from("users")
       .update({ account_status: accountStatus, updated_at: new Date().toISOString() })
@@ -140,10 +136,10 @@ async function setReportedUserAccountStatus(
     const designerId = profiles?.[0]?.designer_id;
 
     if (designerId) {
-      const { error: designerError } = await supabase
-        .from("designer_profiles")
-        .update({ marketplace_live: false, updated_at: new Date().toISOString() })
-        .eq("id", designerId);
+      const { error: designerError } = await supabase.rpc("admin_set_marketplace_live", {
+        p_designer_id: designerId,
+        p_live: false,
+      });
       if (designerError) throw new Error(designerError.message);
     }
 
@@ -152,7 +148,6 @@ async function setReportedUserAccountStatus(
       .update({ status: "resolved" })
       .eq("id", report.id);
     if (reportError) throw new Error(reportError.message);
-  });
 }
 
 export async function suspendReportedUser(reportKey: string) {

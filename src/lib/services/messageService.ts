@@ -6,7 +6,7 @@ import {
   mapDesigner,
   mapThreadMessage,
 } from "@/lib/supabase/mappers";
-import type { Conversation, ThreadMessage } from "@/lib/conversations";
+import type { Conversation } from "@/lib/conversations";
 import type { MessageAttachment } from "@/lib/conversations";
 import { buildMessageNotifications, type AppNotification } from "@/lib/notifications";
 import { formatTimestamp } from "@/lib/services/authService";
@@ -18,7 +18,6 @@ import {
 } from "@/lib/services/customerService";
 import { getDesignerById, listDesigners, resolveDesignerProfileId } from "@/lib/services/designerService";
 import { createProject, listProjects } from "@/lib/services/projectService";
-import { runSensitiveAction } from "@/lib/security/sensitive-rate-limit";
 import { isConversationReadOnly } from "@/lib/unlink-guards";
 import type { Customer, Designer } from "@/lib/mock-data";
 
@@ -355,11 +354,7 @@ export async function sendProjectMessage(input: {
     }
   }
 
-  const { data, error } = await runSensitiveAction(
-    "messagingWrite",
-    input.senderUserId ?? input.authUser?.id ?? projectUuid,
-    () =>
-      supabase
+  const { data, error } = await supabase
         .from("messages")
         .insert({
           project_id: projectUuid,
@@ -373,8 +368,7 @@ export async function sendProjectMessage(input: {
             : null,
         })
         .select("*")
-        .single()
-  );
+        .single();
   if (error) throw new Error(error.message);
   return mapThreadMessage(data);
 }

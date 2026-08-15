@@ -15,7 +15,6 @@ import { formatStartedDateFromIso } from "@/lib/project-details";
 import { resolveDesignerProfileId } from "@/lib/services/designerService";
 import { resolveCustomerProfileId } from "@/lib/services/customerService";
 import {
-  canReportDeliveryIssue,
   DESIGNER_DELIVER_ACTION_STATUS,
   LEGACY_DELIVERED_STATUS,
   REDELIVERED_STATUS,
@@ -25,7 +24,6 @@ import { markProjectDelivered, redeliverProject } from "@/lib/services/deliveryS
 import type { DbCustomerReference, DbProject, DbProjectItem } from "@/lib/types/database";
 import type { ProjectItemInput } from "@/lib/project-items";
 import { createProjectItems } from "@/lib/services/projectItemService";
-import { runSensitiveAction } from "@/lib/security/sensitive-rate-limit";
 
 type DesignerMeta = {
   id: string;
@@ -308,11 +306,7 @@ export async function createProject(
   const now = new Date().toISOString();
   const startedDate = formatStartedDateFromIso(now);
 
-  const actorId =
-    (await supabase.auth.getUser()).data.user?.id ?? input.designerProfileId;
-
-  const { data, error } = await runSensitiveAction("designRequest", actorId, () =>
-    supabase
+  const { data, error } = await supabase
       .from("projects")
       .insert({
         project_code: code,
@@ -336,8 +330,7 @@ export async function createProject(
         updated_at: now,
       })
       .select("*")
-      .single()
-  );
+      .single();
   if (error) {
     if (/row-level security/i.test(error.message)) {
       if (options?.skipActiveLinkCheck) {

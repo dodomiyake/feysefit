@@ -9,7 +9,10 @@ import { DEMO_DESIGNER_ID } from "@/lib/customer-access";
 import { isSupabaseEnabled } from "@/lib/config/backend";
 
 function generateInviteCode() {
-  return `FF-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `FF-${hex.slice(0, 20).toUpperCase()}`;
 }
 
 export interface InviteDetails {
@@ -69,46 +72,48 @@ export async function createInvite(input: {
 }
 
 export async function getInviteByCode(code: string): Promise<InviteDetails | null> {
-  const supabase = createClient();
   const normalized = normalizeInviteCode(code);
-  const { data, error } = await supabase.rpc("lookup_invite_code", {
-    invite_code: normalized,
-  });
-  if (error) throw new Error(error.message);
-  if (!data || typeof data !== "object") return null;
+  if (!normalized) return null;
 
-  const row = data as {
-    id: string;
-    legacy_id: string | null;
-    code: string;
-    name: string;
-    project_type: string;
-    sent_at: string;
-    sent_ago: string;
-    status: "pending" | "accepted" | "expired";
-    designer_name: string;
-    business_name: string;
-    designer_legacy_id: string;
+  const response = await fetch("/auth/invite-lookup", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code: normalized }),
+  });
+  if (!response.ok) return null;
+  const payload = (await response.json()) as {
+    found?: unknown;
+    name?: unknown;
+    projectType?: unknown;
+    designerName?: unknown;
+    businessName?: unknown;
   };
+  if (payload.found !== true) return null;
+
+  const name = typeof payload.name === "string" ? payload.name : "";
+  const projectType = typeof payload.projectType === "string" ? payload.projectType : "";
+  const designerName = typeof payload.designerName === "string" ? payload.designerName : "Your designer";
+  const businessName = typeof payload.businessName === "string" ? payload.businessName : "";
 
   return {
     invite: mapPendingInvite({
-      id: row.id,
-      legacy_id: row.legacy_id,
+      id: "",
+      legacy_id: null,
       designer_id: "",
-      code: row.code,
-      name: row.name,
+      code: normalized,
+      name,
       email: "",
-      project_type: row.project_type,
-      sent_at: row.sent_at,
-      sent_ago: row.sent_ago,
-      status: row.status,
-      created_at: row.sent_at,
+      project_type: projectType,
+      sent_at: "",
+      sent_ago: "",
+      status: "pending",
+      created_at: new Date().toISOString(),
     }),
-    designerName: row.designer_name,
-    businessName: row.business_name,
-    designerLegacyId: row.designer_legacy_id,
-    status: row.status,
+    designerName,
+    businessName,
+    designerLegacyId: "",
+    status: "pending",
   };
 }
 

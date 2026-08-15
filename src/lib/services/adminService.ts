@@ -1,5 +1,4 @@
 import { createClient } from "@/lib/supabase/client";
-import { runSensitiveAction } from "@/lib/security/sensitive-rate-limit";
 
 export interface AdminTeamMember {
   id: string;
@@ -47,17 +46,12 @@ export async function grantAdminAccess(email: string): Promise<AdminTeamMember> 
     throw new Error("This user already has admin portal access.");
   }
 
-  const { data: updated, error: updateError } = await runSensitiveAction(
-    "adminMutation",
-    user.id,
-    () =>
-      supabase
+  const { data: updated, error: updateError } = await supabase
         .from("users")
         .update({ role: "admin" })
         .eq("id", user.id)
         .select("id, email, name, created_at")
-        .single()
-  );
+        .single();
   if (updateError) throw new Error(updateError.message);
 
   return {
@@ -100,8 +94,6 @@ export async function revokeAdminAccess(userId: string, actingAdminId: string) {
   const match = profiles?.[0];
   const restoreRole = match?.designer_id ? "designer" : match?.customer_id ? "customer" : "customer";
 
-  const { error: updateError } = await runSensitiveAction("adminMutation", userId, () =>
-    supabase.from("users").update({ role: restoreRole }).eq("id", userId)
-  );
+  const { error: updateError } = await supabase.from("users").update({ role: restoreRole }).eq("id", userId);
   if (updateError) throw new Error(updateError.message);
 }

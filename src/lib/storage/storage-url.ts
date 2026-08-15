@@ -5,6 +5,7 @@ const PRIVATE_STORAGE_BUCKETS = new Set<StorageBucket>([
   STORAGE_BUCKETS.projectReferences,
   STORAGE_BUCKETS.projectProgress,
   STORAGE_BUCKETS.customerInspiration,
+  STORAGE_BUCKETS.uploadsQuarantine,
 ]);
 
 const KNOWN_STORAGE_BUCKETS = new Set<string>(Object.values(STORAGE_BUCKETS));

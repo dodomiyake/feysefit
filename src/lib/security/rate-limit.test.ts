@@ -10,6 +10,9 @@ import {
 } from "./rate-limit-core";
 import { rateLimitHttpResponse } from "@/server/http";
 
+process.env.RATE_LIMIT_HMAC_SECRET =
+  process.env.RATE_LIMIT_HMAC_SECRET || "ci-rate-limit-hmac-secret-not-for-production";
+
 const PROVIDER_ERROR = "relation public.rate_limit_counters does not exist";
 
 const KINDS = [
@@ -153,6 +156,29 @@ describe("durable rate limit fail-closed", () => {
     });
     assert.equal(called, 1);
     assert.deepEqual(result, { ok: true, value: "created" });
+  });
+
+  it("does not run the protected action when RATE_LIMIT_HMAC_SECRET is missing", async () => {
+    const previous = process.env.RATE_LIMIT_HMAC_SECRET;
+    delete process.env.RATE_LIMIT_HMAC_SECRET;
+    try {
+      let called = 0;
+      const result = await runWithDurableRateLimit({
+        rpc: failingRpc({ data: true, error: null }),
+        bucket: "auth-abuse:actor",
+        limit: 10,
+        windowSeconds: 60,
+        action: () => {
+          called += 1;
+          return "mutated";
+        },
+      });
+      assert.equal(called, 0);
+      assert.equal(result.ok, false);
+    } finally {
+      if (previous === undefined) delete process.env.RATE_LIMIT_HMAC_SECRET;
+      else process.env.RATE_LIMIT_HMAC_SECRET = previous;
+    }
   });
 
   it("logs infrastructure failure with requestId and redaction, not the public body", async () => {

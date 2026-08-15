@@ -44,14 +44,9 @@ async function acceptInviteForOnboarding(inviteCode: string) {
   if (isSupabaseEnabled()) {
     const details = await getInviteByCode(normalized);
     if (!details) {
-      throw new Error("Invite code not found. Check the code from your designer.");
+      throw new Error("This invitation cannot be used.");
     }
-    if (details.status === "expired") {
-      throw new Error("This invite has expired. Ask your designer for a new code.");
-    }
-    if (details.status === "pending") {
-      await acceptInviteCode(normalized);
-    }
+    await acceptInviteCode(normalized);
     return details.designerLegacyId || null;
   }
 

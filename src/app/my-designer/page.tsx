@@ -18,7 +18,8 @@ export default function MyDesignerPage() {
   const { customerLink, getDesignerById } = useApp();
   const linkedId = customerLink.linkedDesignerId;
   const fromContext = linkedId ? getDesignerById(linkedId) : undefined;
-  const [designer, setDesigner] = useState<Designer | undefined>(fromContext);
+  const [fetchedDesigner, setFetchedDesigner] = useState<Designer | undefined>();
+  const designer = fromContext ?? fetchedDesigner;
   const [loadingDesigner, setLoadingDesigner] = useState(Boolean(linkedId && !fromContext));
 
   useEffect(() => {
@@ -28,25 +29,15 @@ export default function MyDesignerPage() {
   }, [customerLink, router]);
 
   useEffect(() => {
-    if (fromContext) {
-      setDesigner(fromContext);
-      setLoadingDesigner(false);
-      return;
-    }
-    if (!linkedId) {
-      setDesigner(undefined);
-      setLoadingDesigner(false);
-      return;
-    }
+    if (fromContext || !linkedId) return;
 
     let cancelled = false;
-    setLoadingDesigner(true);
     void fetchDesignerById(linkedId)
       .then((loaded) => {
-        if (!cancelled) setDesigner(loaded ?? undefined);
+        if (!cancelled) setFetchedDesigner(loaded ?? undefined);
       })
       .catch(() => {
-        if (!cancelled) setDesigner(undefined);
+        if (!cancelled) setFetchedDesigner(undefined);
       })
       .finally(() => {
         if (!cancelled) setLoadingDesigner(false);

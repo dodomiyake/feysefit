@@ -111,18 +111,22 @@ export function useAuthAbuseGuard(action: AuthAbuseAction, subject: string) {
 
   useEffect(() => {
     if (!showCaptcha || !siteKey) {
-      setCaptchaStatus("idle");
-      setCaptchaToken(null);
-      return;
+      const idle = window.setTimeout(() => {
+        setCaptchaStatus("idle");
+        setCaptchaToken(null);
+      }, 0);
+      return () => window.clearTimeout(idle);
     }
     if (!hostEl) {
-      setCaptchaStatus("loading");
-      return;
+      const loading = window.setTimeout(() => setCaptchaStatus("loading"), 0);
+      return () => window.clearTimeout(loading);
     }
 
     let cancelled = false;
-    setCaptchaStatus("loading");
-    setCaptchaToken(null);
+    const loading = window.setTimeout(() => {
+      setCaptchaStatus("loading");
+      setCaptchaToken(null);
+    }, 0);
 
     const mount = async () => {
       try {
@@ -173,6 +177,7 @@ export function useAuthAbuseGuard(action: AuthAbuseAction, subject: string) {
 
     return () => {
       cancelled = true;
+      window.clearTimeout(loading);
       if (widgetIdRef.current && window.turnstile) {
         try {
           window.turnstile.remove(widgetIdRef.current);

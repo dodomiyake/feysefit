@@ -6,6 +6,7 @@
 --   2. supabase/patch-testimonial-view-lockdown.sql
 --   3. supabase/patch-function-execute-lockdown.sql
 --   4. supabase/patch-admin-aal-rls.sql
+--   5. supabase/patch-security-audit-followup.sql
 --
 -- This file does not create tables. If you run it first you will get
 -- "relation does not exist".
@@ -20,9 +21,9 @@ begin
     raise exception
       'public.marketplace_designers does not exist. The designer-private-details patch did not finish. Re-run that file from the top.';
   end if;
-  if to_regprocedure('public.consume_rate_limit(text,integer,integer)') is null then
+  if to_regprocedure('public.consume_rate_limit_server(text,text)') is null then
     raise exception
-      'public.consume_rate_limit(text,integer,integer) does not exist. Run supabase/patch-function-execute-lockdown.sql before deploying the app.';
+      'public.consume_rate_limit_server(text,text) does not exist. Run supabase/patch-security-audit-followup.sql before deploying the app.';
   end if;
 end $$;
 
@@ -118,29 +119,35 @@ begin
   raise notice 'PASS: designer_profiles is column-only for anon/authenticated';
 end $$;
 
--- Durable limiter: allow within quota, deny when exhausted. Rolled back below.
+-- Browser roles cannot execute the old limiter. Private limiter allow-then-deny.
 do $$
 declare
-  k text := 'staging-limiter-' || gen_random_uuid()::text;
+  k text := md5(gen_random_uuid()::text);
   first_hit boolean;
   second_hit boolean;
   third_hit boolean;
 begin
-  first_hit := public.consume_rate_limit(k, 2, 60);
-  second_hit := public.consume_rate_limit(k, 2, 60);
-  third_hit := public.consume_rate_limit(k, 2, 60);
+  if has_function_privilege('anon', 'public.consume_rate_limit(text,integer,integer)', 'EXECUTE')
+     or has_function_privilege('authenticated', 'public.consume_rate_limit(text,integer,integer)', 'EXECUTE') then
+    raise exception 'FAIL: browser roles can still execute public.consume_rate_limit';
+  end if;
+
+  insert into app_private.rate_limit_policies (operation, hit_limit, window_seconds)
+  values ('ci_probe', 2, 60)
+  on conflict (operation) do update set hit_limit = 2, window_seconds = 60;
+
+  first_hit := app_private.consume_rate_limit('ci_probe', k);
+  second_hit := app_private.consume_rate_limit('ci_probe', k);
+  third_hit := app_private.consume_rate_limit('ci_probe', k);
 
   if first_hit is distinct from true or second_hit is distinct from true then
-    raise exception 'FAIL: consume_rate_limit did not allow the first two hits';
+    raise exception 'FAIL: app_private.consume_rate_limit did not allow the first two hits';
   end if;
   if third_hit is distinct from false then
-    raise exception 'FAIL: consume_rate_limit did not deny the exhausted hit (got %)', third_hit;
-  end if;
-  if public.consume_rate_limit('', 2, 60) is not distinct from true then
-    raise exception 'FAIL: empty bucket was allowed';
+    raise exception 'FAIL: app_private.consume_rate_limit did not deny the exhausted hit (got %)', third_hit;
   end if;
 
-  raise notice 'PASS: consume_rate_limit allow then deny';
+  raise notice 'PASS: private consume_rate_limit allow then deny; public RPC not executable by browser roles';
 end $$;
 
 -- Anon cannot execute privileged mutations

@@ -1,23 +1,16 @@
-import { handleApiError, jsonData, jsonError } from "@/server/http";
+import { jsonData, jsonError } from "@/server/http";
 import { pinterestImageCandidates, upgradePinterestCdnUrl } from "@/lib/reference-image-url";
 import { createClient } from "@/lib/supabase/server";
 import { clientIpFromHeaders, runSensitiveHttpAction } from "@/lib/security/rate-limit";
+import {
+  decodeFetchBody,
+  fetchPinterestHttps,
+  isAllowedPinterestUrl,
+} from "@/lib/security/safe-outbound-fetch";
 
 type PinterestOEmbed = {
   thumbnail_url?: string;
 };
-
-function isAllowedPreviewUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    if (!["http:", "https:"].includes(parsed.protocol)) return false;
-    const host = parsed.hostname.toLowerCase();
-    if (host === "pin.it") return true;
-    return host === "pinterest.com" || host.endsWith(".pinterest.com");
-  } catch {
-    return false;
-  }
-}
 
 function extractOgImage(html: string): string | null {
   const patterns = [
@@ -39,34 +32,32 @@ function decodeHtmlEntities(value: string): string {
     .replace(/&#39;/g, "'");
 }
 
-async function resolveFromPinPage(pinUrl: string): Promise<string | null> {
-  const response = await fetch(pinUrl, {
-    headers: {
-      Accept: "text/html",
-      "User-Agent":
-        "Mozilla/5.0 (compatible; FeyseFit/1.0; +https://feysefit.com)",
-    },
-    redirect: "follow",
-    next: { revalidate: 3600 },
-  });
-  if (!response.ok) return null;
+function publicPreviewFailure() {
+  return jsonError("Could not resolve Pinterest pin", 502);
+}
 
-  const html = await response.text();
+async function resolveFromPinPage(pinUrl: string): Promise<string | null> {
+  const result = await fetchPinterestHttps(pinUrl);
+  if (!result.ok) return null;
+  const html = decodeFetchBody(result.body);
   const ogImage = extractOgImage(html);
-  return ogImage ? upgradePinterestCdnUrl(ogImage) : null;
+  if (!ogImage) return null;
+  const upgraded = upgradePinterestCdnUrl(ogImage);
+  return isAllowedPinterestUrl(upgraded).ok ? upgraded : null;
 }
 
 async function resolveFromOEmbed(pinUrl: string): Promise<string | null> {
   const oembedUrl = `https://www.pinterest.com/oembed.json?url=${encodeURIComponent(pinUrl)}`;
-  const response = await fetch(oembedUrl, {
-    headers: { Accept: "application/json" },
-    next: { revalidate: 3600 },
-  });
-  if (!response.ok) return null;
-
-  const data = (await response.json()) as PinterestOEmbed;
-  if (!data.thumbnail_url) return null;
-  return upgradePinterestCdnUrl(data.thumbnail_url);
+  const result = await fetchPinterestHttps(oembedUrl);
+  if (!result.ok) return null;
+  try {
+    const data = JSON.parse(decodeFetchBody(result.body)) as PinterestOEmbed;
+    if (!data.thumbnail_url) return null;
+    const upgraded = upgradePinterestCdnUrl(data.thumbnail_url);
+    return isAllowedPinterestUrl(upgraded).ok ? upgraded : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function GET(request: Request) {
@@ -80,7 +71,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const url = searchParams.get("url");
     if (!url) return jsonError("url is required", 400);
-    if (!isAllowedPreviewUrl(url)) {
+    if (!isAllowedPinterestUrl(url).ok) {
       return jsonError("Only Pinterest pin links are supported for preview resolution", 400);
     }
 
@@ -91,16 +82,14 @@ export async function GET(request: Request) {
     );
     if (!gated.ok) return gated.response;
     const imageUrl = gated.value;
-    if (!imageUrl) {
-      return jsonError("Could not resolve Pinterest pin", 502);
-    }
+    if (!imageUrl) return publicPreviewFailure();
 
     return jsonData({
       imageUrl,
       sourceUrl: url,
       fallbacks: pinterestImageCandidates(imageUrl).slice(1),
     });
-  } catch (error) {
-    return handleApiError(error);
+  } catch {
+    return publicPreviewFailure();
   }
 }

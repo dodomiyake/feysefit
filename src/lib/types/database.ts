@@ -768,7 +768,11 @@ export interface Database {
       };
       lookup_invite_code: {
         Args: { invite_code: string };
-        Returns: Json;
+        Returns: Json | null;
+      };
+      lookup_invite_code_server: {
+        Args: { p_code: string };
+        Returns: Json | null;
       };
       update_customer_fabric_selection: {
         Args: {
@@ -793,6 +797,16 @@ export interface Database {
         Args: {
           p_event_type: string;
           p_email?: string | null;
+          p_ip?: string | null;
+          p_user_agent?: string | null;
+          p_meta?: Json;
+        };
+        Returns: undefined;
+      };
+      log_account_activity_server: {
+        Args: {
+          p_event_type: string;
+          p_user_id: string;
           p_ip?: string | null;
           p_user_agent?: string | null;
           p_meta?: Json;
@@ -835,6 +849,18 @@ export interface Database {
       consume_rate_limit: {
         Args: { p_bucket: string; p_limit: number; p_window_seconds: number };
         Returns: boolean;
+      };
+      consume_rate_limit_server: {
+        Args: { p_operation: string; p_bucket: string };
+        Returns: boolean;
+      };
+      admin_set_marketplace_live: {
+        Args: { p_designer_id: string; p_live: boolean };
+        Returns: undefined;
+      };
+      withdraw_own_marketplace_listing: {
+        Args: Record<PropertyKey, never>;
+        Returns: undefined;
       };
     };
     Enums: Record<string, never>;

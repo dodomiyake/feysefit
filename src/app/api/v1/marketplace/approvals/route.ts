@@ -4,12 +4,12 @@ import {
   listMarketplaceApprovals,
 } from "@/server/services/marketplace";
 import { handleApiError, jsonData } from "@/server/http";
-import { isAuthError, requireApiRole } from "@/server/api-auth";
+import { isAuthError, requireApiAdminAal2 } from "@/server/api-auth";
 import { runSensitiveHttpAction } from "@/lib/security/rate-limit";
 
 export async function GET() {
   try {
-    const session = await requireApiRole(["admin"]);
+    const session = await requireApiAdminAal2();
     if (isAuthError(session)) return session;
     return jsonData(await listMarketplaceApprovals());
   } catch (error) {
@@ -19,7 +19,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireApiRole(["admin"]);
+    const session = await requireApiAdminAal2();
     if (isAuthError(session)) return session;
     const body = (await request.json()) as MarketplaceApproval;
     const gated = await runSensitiveHttpAction("adminMutation", session.sub, () =>

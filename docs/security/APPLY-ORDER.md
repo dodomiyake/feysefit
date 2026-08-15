@@ -1,54 +1,69 @@
 # Security hardening — staging rollout
 
 Do **not** apply these files to production from this repository, and do **not**
-deploy the hardened application until `consume_rate_limit` exists in the target
-database. Sign-in, signup, messaging, and other protected actions fail closed
-with HTTP 503 if the limiter RPC is missing.
+deploy application code that depends on `consume_rate_limit_server` until that
+function exists in the target database. Protected actions fail closed with
+HTTP 503 if the HMAC secret or service-role limiter is missing.
 
 ## Rollout order (staging)
 
-1. Apply the database patches, including `consume_rate_limit`.
-2. Run the staging security test script.
-3. Verify the limiter directly.
-4. Deploy the hardened application.
-5. Run the end-to-end authorization matrix.
-6. Run Supabase Security Advisor.
-7. Only then plan production deployment.
+1. Take a staging backup.
+2. Apply the database patches in the order below.
+3. Run the staging security test scripts (they `ROLLBACK`).
+4. Verify the limiter and grants.
+5. Enable leaked-password protection in the Auth dashboard if Advisor still reports it off. See `docs/security/leaked-password-protection.md`. This is release-blocking.
+6. Set staging server-only secrets (never `NEXT_PUBLIC_*`):
+   - `SECURITY_COOKIE_SECRET` (optional `SECURITY_COOKIE_SECRET_PREVIOUS` during rotation)
+   - `RATE_LIMIT_HMAC_SECRET`
+   - `SECURITY_EVENT_HMAC_SECRET`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `USE_LEGACY_API=false`
+   - `TRUST_CLOUDFLARE=1` only when the deployment is behind Cloudflare
+   - `TRUSTED_PROXY=1` only behind a proxy that overwrites `x-forwarded-for`
+   - Vercel already sets `VERCEL=1`; do not also trust arbitrary forwarding headers
+   - `CRON_SECRET` to authorize `POST /auth/uploads/cleanup-quarantine` (Storage API byte delete)
+7. Deploy the hardened application **after** the SQL, except public-image INSERT
+   revocation in follow-up 2 which must land in the same window as `/auth/uploads/promote`.
+8. Run the end-to-end authorization matrix against **staging Supabase** (anon + authenticated
+   keys). Disposable `postgres:16-alpine` is not equivalent to Supabase.
+9. Re-run Supabase Security Advisor.
+10. Only then plan a production maintenance window. Do not apply production SQL from this repository automatically.
 
-## Database patches (step 1)
+## Database patches (step 2)
 
 Existing production baseline (already applied historically; do not re-run unless a new project):
 
 - `supabase/schema.sql` or the previously applied `patch-*.sql` chain
 - `supabase/patch-designer-contact-service-areas.sql` (already live — do not re-run)
 - `supabase/patch-marketplace-admin-approval.sql` (already live — do not re-run)
+- First hardening pass (if already live, do not re-run as the only remedy):
+  - `supabase/patch-designer-private-details.sql`
+  - `supabase/patch-testimonial-view-lockdown.sql`
+  - `supabase/patch-function-execute-lockdown.sql`
+  - `supabase/patch-admin-aal-rls.sql`
 
-Then, in a **staging** SQL editor, entire files from line 1, nothing highlighted:
+Then, in a **staging** SQL editor, entire files from line 1:
 
 1. Optional read-only check: `supabase/tests/staging-preflight.sql`
-2. `supabase/patch-designer-private-details.sql`
-   - Idempotent. Re-run fills missing private rows and leftover public phones, but
-     does **not** overwrite a non-empty `designer_private_details.phone`.
-   - `REVOKE SELECT` runs before column `GRANT`s.
-3. `supabase/patch-testimonial-view-lockdown.sql`
-   - Rebuilds `marketplace_testimonials` and `testimonials_for_participants` as
-     non-auto-updatable (subquery in `FROM`) with SELECT-only grants.
-4. `supabase/patch-function-execute-lockdown.sql` — creates
-   `public.consume_rate_limit(text, integer, integer)`
-5. `supabase/patch-admin-aal-rls.sql`
+2. If the first hardening pass is not on this project, apply those four files.
+3. `supabase/patch-security-audit-followup.sql` (additive follow-up from the second audit)
+4. `supabase/patch-security-audit-followup-2.sql` (account-activity EXECUTE, scheduled cleanup, public-image INSERT revoke). This file **raises** if `app_private` or `consume_rate_limit_server` from follow-up 1 are missing.
 
-Limiter signature for `to_regprocedure` is **three** arguments:
+Limiter for the application is now:
 
 ```sql
-select to_regprocedure('public.consume_rate_limit(text,integer,integer)');
+select to_regprocedure('public.consume_rate_limit_server(text,text)');
 ```
 
-Do not use `(text,text,integer,integer)`.
+`public.consume_rate_limit(text,integer,integer)` remains as a deny stub. Anon and authenticated must not have `EXECUTE`.
 
-## After patches (steps 2–3)
+## After patches (steps 3–4)
 
 1. `supabase/tests/security-hardening.sql` (staging only; ends in `ROLLBACK`)
-2. Grant boundary — all five must be `false`:
+2. `supabase/tests/security-audit-followup.sql` (staging only; ends in `ROLLBACK`)
+3. `supabase/tests/security-audit-followup-2.sql` (staging only; ends in `ROLLBACK`)
+4. Counts-only unscoped inventory: `supabase/tests/unscoped-storage-inventory.sql` (no filenames)
+5. Grant boundary — all five must be `false`:
 
 ```sql
 select
@@ -67,32 +82,55 @@ select
   ) as authenticated_admin_notes;
 ```
 
-3. Views — `is_updatable` and `is_insertable_into` must be `NO` for
-   `marketplace_designers`, `marketplace_testimonials`, and
-   `testimonials_for_participants`. The security test raises if they are not.
-4. Limiter SQL check is inside the security test (allow two hits, deny the third).
-   Application states are covered by `src/lib/security/rate-limit.test.ts`:
-   - `true` → protected callback runs
-   - `false` → HTTP 429 `rate_limited`; callback does not run
-   - missing / error / invalid / `NULL` → HTTP 503 `rate_limit_unavailable`; callback does not run
+4. Integrity columns — authenticated `UPDATE` on `rating`, `review_count`, and `marketplace_live` must be false.
+5. Views — `is_updatable` / `is_insertable_into` = `NO`. `marketplace_testimonials` must be `security_invoker=true`.
+6. Direct anon `EXECUTE` of `consume_rate_limit`, `log_security_event`, `log_account_activity`, and `lookup_invite_code` must fail.
+7. `can_read_private_storage_object` is a function: check `EXECUTE`, not `SELECT`.
+8. Enable `pg_cron` in staging if the follow-up 2 notice said it was skipped, then re-apply follow-up 2 so cleanup jobs register.
 
-## Application deploy (step 4)
+## Application deploy (step 7)
 
-Deploy from `security/hardening-pass` only after step 1 created
-`consume_rate_limit`. Then complete steps 5–7.
+Deploy from `security/hardening-pass` only after step 2 created
+`consume_rate_limit_server` and `log_account_activity_server`, and the HMAC / cookie secrets are set. Coordinate `/auth/uploads/promote` with the public-image INSERT revocation.
 
 ## Rollback order (reverse)
 
-1. `supabase/rollback-admin-aal-rls.sql`
-2. `supabase/rollback-function-execute-lockdown.sql`
-3. `supabase/rollback-testimonial-view-lockdown.sql`
-4. `supabase/rollback-designer-private-details.sql`
+If follow-up 2 was applied and the matching application was **not** deployed:
 
-Rollback restores previous grants/policies. It does **not** delete
-`designer_private_details` rows.
+1. `supabase/rollback-security-audit-followup-2.sql`
+2. `supabase/rollback-security-audit-followup.sql`
 
-## Expected Security Advisor findings (do not suppress without this note)
+Those rollbacks do **not** restore anonymous privacy exposure, blanket
+`TRUNCATE`/`TRIGGER`/`REFERENCES`, browser limiter/logging execution, designer
+updates to ratings / `marketplace_live`, or authenticated INSERT on public image buckets.
+`rollback-function-execute-lockdown.sql` also keeps logging and limiter EXECUTE revoked.
 
-- `marketplace_testimonials` as SECURITY DEFINER. Required so signed-out visitors can read public-safe testimonial columns after anon SELECT was revoked on `testimonials`. The view is read-only, projects no private_feedback/customer_id/project_id, and writes are revoked.
-- RLS helper functions (`is_admin`, `current_designer_profile_id`, …) as SECURITY DEFINER. They read `auth.uid()` and `public.users.role`, not client-editable user metadata. EXECUTE is granted because policies invoke them.
-- Leaked-password protection is a dashboard Auth setting, not SQL. Enable it using `docs/security/leaked-password-protection.md`.
+Earlier first-pass rollbacks (only if those patches must be undone):
+
+3. `supabase/rollback-admin-aal-rls.sql`
+4. `supabase/rollback-function-execute-lockdown.sql`
+5. `supabase/rollback-testimonial-view-lockdown.sql`
+6. `supabase/rollback-designer-private-details.sql`
+
+## Expected Security Advisor findings
+
+- RLS helper functions (`is_admin`, `is_admin_aal2`, …) as SECURITY DEFINER. They read `auth.uid()` and `public.users.role`, not client-editable user metadata.
+- Leaked-password protection is a dashboard Auth setting, not SQL. Enable it using `docs/security/leaked-password-protection.md` and keep it on the release-blocking checklist. Do not claim it is enabled until the dashboard/Advisor confirms it.
+- `marketplace_testimonials` should **not** remain a `security_definer_view` ERROR after the follow-up patch.
+
+## Storage leftover objects
+
+Unscoped private objects (`{user_id}/filename` without a project UUID) are readable only by the uploader or an AAL2 admin after the follow-up patch. Do not delete them automatically. Run `supabase/tests/unscoped-storage-inventory.sql` for counts only. Plan a copy into `{user_id}/{project_id}/...` during a maintenance window, then confirm reads, then delete the unscoped copies.
+
+## Rate-limit and log retention
+
+Follow-up 2 registers `pg_cron` jobs when the extension exists. Absence of `pg_cron` does **not** abort the patch transaction.
+
+- `feysefit-cleanup-rate-limits` — `app_private.cleanup_rate_limit_counters()` every hour at minute 15
+- `feysefit-cleanup-security-logs` — `app_private.cleanup_security_logs()` daily
+- `feysefit-cleanup-quarantine` — quarantine **catalog** rows older than 24 hours (`storage.objects` only)
+
+Catalog-row cleanup is not a Storage byte purge. Schedule `POST /auth/uploads/cleanup-quarantine` with `CRON_SECRET` to delete objects through the Storage API. See `docs/security/storage-uploads.md`.
+
+If `pg_cron` is not enabled, those SQL jobs are skipped and must be scheduled after the extension is turned on. See also `docs/security/turnstile-gothrue.md` and `docs/security/jspdf-dompurify.md`.
+

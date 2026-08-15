@@ -14,6 +14,15 @@ This cannot be turned on from application SQL. A project owner must enable it in
 
 Until this is enabled, the application password policy still blocks short secrets, but it cannot detect passwords that already appeared in public dumps.
 
+## Release-blocking checklist
+
+- [ ] Staging: Authentication → Attack Protection → Leaked password protection = on
+- [ ] Staging: Advisor no longer reports leaked password protection as an error
+- [ ] Production: same dashboard setting enabled after the staging confirmation
+- [ ] Record the dashboard confirmation (project ref + date) in the ops log. Do not store credentials.
+
+Do not claim this control is enabled until the dashboard or Advisor confirms it.
+
 Related production settings that must stay on:
 
 - Email confirmation / verification

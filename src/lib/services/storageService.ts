@@ -61,7 +61,6 @@ function getFileExtension(file: File) {
     "image/jpeg": "jpg",
     "image/png": "png",
     "image/webp": "webp",
-    "image/gif": "gif",
     "application/pdf": "pdf",
     "application/msword": "doc",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
@@ -103,10 +102,7 @@ async function sniffImageMime(file: File): Promise<string | null> {
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
     return "image/jpeg";
   }
-  // GIF: "GIF8"
-  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) {
-    return "image/gif";
-  }
+  // GIF is not accepted (no safe re-encode path in this pass).
   // WebP: "RIFF" .... "WEBP"
   if (
     bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
@@ -128,7 +124,7 @@ export async function validateImageFile(file: File): Promise<string | null> {
   }
   const detected = await sniffImageMime(file);
   if (!detected) {
-    return `"${file.name}" is not a supported image. Use JPG, PNG, WebP, or GIF.`;
+    return `"${file.name}" is not a supported image. Use JPG, PNG, or WebP.`;
   }
   if (file.size > MAX_STORAGE_IMAGE_BYTES) {
     return `"${file.name}" is larger than 5MB. Compress it and try again.`;
@@ -193,6 +189,9 @@ async function uploadOwnedObject(
     upsert: false,
     contentType: contentType || file.type || "application/octet-stream",
     cacheControl: "3600",
+    headers: DOCUMENT_MIME.has(contentType || file.type)
+      ? { "Content-Disposition": `attachment; filename="${fileName.replace(/"/g, "")}"` }
+      : undefined,
   });
   if (error) throw new Error(error.message);
 
@@ -229,35 +228,6 @@ export async function resolveStorageAccessUrl(url: string): Promise<string> {
   return data.signedUrl;
 }
 
-const MIME_TO_EXTENSION: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-  "image/gif": "gif",
-};
-
-async function reencodeImageWithoutExif(file: File, mime: string): Promise<File> {
-  if (mime === "image/gif") return file;
-  if (typeof createImageBitmap !== "function") return file;
-  try {
-    const bitmap = await createImageBitmap(file);
-    const canvas = document.createElement("canvas");
-    canvas.width = bitmap.width;
-    canvas.height = bitmap.height;
-    const context = canvas.getContext("2d");
-    if (!context) return file;
-    context.drawImage(bitmap, 0, 0);
-    bitmap.close();
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, mime, 0.92)
-    );
-    if (!blob) return file;
-    return new File([blob], file.name, { type: mime });
-  } catch {
-    return file;
-  }
-}
-
 export async function uploadImage(
   bucket: StorageBucket,
   ownerId: string,
@@ -265,17 +235,29 @@ export async function uploadImage(
   prefix = "image",
   projectId?: string | null
 ): Promise<string> {
-  const detectedType = await assertImageFile(file);
-  const stripped = await reencodeImageWithoutExif(file, detectedType);
-  return uploadOwnedObject(
-    bucket,
-    ownerId,
-    stripped,
-    prefix,
-    projectId,
-    detectedType,
-    MIME_TO_EXTENSION[detectedType]
-  );
+  await assertImageFile(file);
+  const form = new FormData();
+  form.set("bucket", bucket);
+  form.set("prefix", prefix);
+  form.set("file", file);
+  if (projectId?.trim()) form.set("projectId", projectId.trim());
+
+  const response = await fetch("/auth/uploads/promote", {
+    method: "POST",
+    credentials: "same-origin",
+    body: form,
+  });
+  const body = (await response.json().catch(() => null)) as
+    | { ok?: boolean; url?: string; error?: string }
+    | null;
+  if (!response.ok || !body?.ok || !body.url) {
+    if (body?.error === "too_large") throw new Error("Image is too large.");
+    if (body?.error === "invalid_type") throw new Error("Only JPEG, PNG, or WebP images are allowed.");
+    if (body?.error === "too_many_pixels") throw new Error("Image dimensions are too large.");
+    throw new Error("That image could not be uploaded. Try a smaller JPEG, PNG, or WebP file.");
+  }
+  void ownerId;
+  return body.url;
 }
 
 export async function uploadStorageFile(

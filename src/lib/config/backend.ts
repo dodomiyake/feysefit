@@ -3,7 +3,8 @@ export function isSupabaseEnabled() {
 }
 
 export function isApiEnabled() {
-  return !isSupabaseEnabled() && process.env.NEXT_PUBLIC_USE_API === "true";
+  if (isSupabaseEnabled()) return false;
+  return process.env.USE_LEGACY_API === "true";
 }
 
 export function isLocalDemoMode() {

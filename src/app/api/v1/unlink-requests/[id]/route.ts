@@ -3,7 +3,7 @@ import { updateUnlinkRequest, listUnlinkRequests } from "@/server/services/unlin
 import { patchCustomerLink, getCustomerLinkState } from "@/server/services/customers";
 import { syncCustomerLinkFromRequest } from "@/lib/customer-access";
 import { handleApiError, jsonData, jsonError } from "@/server/http";
-import { isAuthError, requireApiSession } from "@/server/api-auth";
+import { isAuthError, requireApiAdminAal2, requireApiSession } from "@/server/api-auth";
 import { runSensitiveHttpAction } from "@/lib/security/rate-limit";
 
 export async function PATCH(
@@ -22,6 +22,10 @@ export async function PATCH(
     const isDesignerOwner =
       session.role === "designer" && session.designerId === existing.designerId;
     const isAdmin = session.role === "admin";
+    if (isAdmin) {
+      const aal2 = await requireApiAdminAal2();
+      if (isAuthError(aal2)) return aal2;
+    }
     if (!isDesignerOwner && !isAdmin) return jsonError("Forbidden", 403);
 
     if (body.status === "approved" && !isAdmin) {

@@ -41,3 +41,23 @@ export async function requireApiRole(roles: UserRole[]): Promise<SessionPayload 
 
   return session;
 }
+
+/** Sensitive admin mutations require a live Supabase AAL2 session. Prisma-only sessions cannot prove AAL2. */
+export async function requireApiAdminAal2(): Promise<SessionPayload | Response> {
+  const session = await requireApiRole(["admin"]);
+  if (isAuthError(session)) return session;
+
+  try {
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return jsonError("Forbidden", 403);
+    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (aal?.currentLevel !== "aal2") return jsonError("Forbidden", 403);
+    return session;
+  } catch {
+    return jsonError("Forbidden", 403);
+  }
+}

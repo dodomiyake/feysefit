@@ -1,7 +1,7 @@
 import type { MarketplaceApproval } from "@/lib/marketplace-approvals";
 import { updateMarketplaceApproval } from "@/server/services/marketplace";
 import { handleApiError, jsonData } from "@/server/http";
-import { isAuthError, requireApiRole } from "@/server/api-auth";
+import { isAuthError, requireApiAdminAal2 } from "@/server/api-auth";
 import { runSensitiveHttpAction } from "@/lib/security/rate-limit";
 
 export async function PATCH(
@@ -9,7 +9,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireApiRole(["admin"]);
+    const session = await requireApiAdminAal2();
     if (isAuthError(session)) return session;
 
     const { id } = await params;

@@ -43,7 +43,8 @@ export default function CustomerDashboardClient() {
   const isPostDelivery = activeProject ? isPostDeliveryStatus(activeProject.status) : false;
   const linkedId = customerLink.linkedDesignerId;
   const fromContext = linkedId ? getDesignerById(linkedId) : undefined;
-  const [designer, setDesigner] = useState<Designer | undefined>(fromContext);
+  const [fetchedDesigner, setFetchedDesigner] = useState<Designer | undefined>();
+  const designer = fromContext ?? fetchedDesigner;
   const hasProject = Boolean(activeProject);
   const showDirectHome = isDirectCustomer(customerLink) && !customerLink.linkedDesignerId;
   const palette = activeProject ? getProjectPalette(activeProject.paletteId) : null;
@@ -54,21 +55,14 @@ export default function CustomerDashboardClient() {
   }, [syncProjects]);
 
   useEffect(() => {
-    if (fromContext) {
-      setDesigner(fromContext);
-      return;
-    }
-    if (!linkedId) {
-      setDesigner(undefined);
-      return;
-    }
+    if (fromContext || !linkedId) return;
     let cancelled = false;
     void fetchDesignerById(linkedId)
       .then((loaded) => {
-        if (!cancelled) setDesigner(loaded ?? undefined);
+        if (!cancelled) setFetchedDesigner(loaded ?? undefined);
       })
       .catch(() => {
-        if (!cancelled) setDesigner(undefined);
+        if (!cancelled) setFetchedDesigner(undefined);
       });
     return () => {
       cancelled = true;

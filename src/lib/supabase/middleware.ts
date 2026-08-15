@@ -10,17 +10,22 @@ import {
 } from "@/lib/auth-routes";
 import { normalizeOnboardingPath, normalizeOnboardingStatus, postAuthDestination } from "@/lib/onboarding";
 import {
-  evaluateSessionClocks,
   getRememberCookieOptions,
   getSessionClockCookieOptions,
   getSupabaseCookieOptions,
+  IDLE_TIMEOUT_MS,
   LAST_ACTIVITY_COOKIE,
   REAUTH_COOKIE,
   REMEMBER_COOKIE,
   SESSION_STARTED_COOKIE,
   isSupabaseAuthCookie,
 } from "@/lib/auth-security";
+import {
+  evaluateSessionClocks,
+  issueSessionClockCookieValues,
+} from "@/lib/auth-security-server";
 import { decideAdminMfaAccess } from "@/lib/security/admin-mfa";
+import { sessionBindingFromAccessToken } from "@/lib/security/session-binding";
 
 const AUTH_REFRESH_TIMEOUT_MS = 4_000;
 
@@ -68,15 +73,24 @@ function redirectWithCookies(request: NextRequest, from: NextResponse, target: s
  * enforcement (background polls / navigation would keep the session alive).
  * Intentional activity updates LAST_ACTIVITY via POST /auth/activity (httpOnly).
  */
-function stampSessionCookies(
+async function stampSessionCookies(
   response: NextResponse,
   remember: boolean,
+  binding: { userId: string; sessionId: string; jwtIssuedAtMs: number | null },
   options: { startedAt: number; lastActivityAt: number }
 ) {
+  const clocks = await issueSessionClockCookieValues({
+    binding,
+    remember,
+    startedAtMs: options.startedAt,
+    lastActivityAtMs: options.lastActivityAt,
+  });
+  if (!clocks) return false;
   const clockOpts = getSessionClockCookieOptions(remember);
   response.cookies.set(REMEMBER_COOKIE, remember ? "1" : "0", getRememberCookieOptions(remember));
-  response.cookies.set(SESSION_STARTED_COOKIE, String(options.startedAt), clockOpts);
-  response.cookies.set(LAST_ACTIVITY_COOKIE, String(options.lastActivityAt), clockOpts);
+  response.cookies.set(SESSION_STARTED_COOKIE, clocks.started, clockOpts);
+  response.cookies.set(LAST_ACTIVITY_COOKIE, clocks.lastActivity, clockOpts);
+  return true;
 }
 
 function clearSessionClockCookies(response: NextResponse) {
@@ -188,6 +202,13 @@ export async function updateSession(request: NextRequest) {
     const {
       data: { user },
     } = await withTimeout(supabase.auth.getUser(), AUTH_REFRESH_TIMEOUT_MS);
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const binding = sessionBindingFromAccessToken({
+      userId: user?.id ?? "",
+      accessToken: session?.access_token,
+    });
 
     if (!user) {
       if (!requiresAuth) return supabaseResponse;
@@ -228,13 +249,33 @@ export async function updateSession(request: NextRequest) {
       return supabaseResponse;
     }
 
-    const clock = evaluateSessionClocks({
-      rememberRaw: request.cookies.get(REMEMBER_COOKIE)?.value,
-      startedRaw: request.cookies.get(SESSION_STARTED_COOKIE)?.value,
-      lastActivityRaw: request.cookies.get(LAST_ACTIVITY_COOKIE)?.value,
-    });
+    const clock = binding
+      ? await evaluateSessionClocks({
+          rememberRaw: request.cookies.get(REMEMBER_COOKIE)?.value,
+          startedRaw: request.cookies.get(SESSION_STARTED_COOKIE)?.value,
+          lastActivityRaw: request.cookies.get(LAST_ACTIVITY_COOKIE)?.value,
+          binding,
+        })
+      : ({ ok: false, reason: "invalid" } as const);
 
-    if (!clock.ok) {
+    const startedRaw = request.cookies.get(SESSION_STARTED_COOKIE)?.value;
+    const lastActivityRaw = request.cookies.get(LAST_ACTIVITY_COOKIE)?.value;
+    const clocksMissing = !startedRaw && !lastActivityRaw;
+    const jwtAgeMs = binding?.jwtIssuedAtMs ? Date.now() - binding.jwtIssuedAtMs : null;
+    const canSeedFromJwt =
+      Boolean(binding) &&
+      clocksMissing &&
+      jwtAgeMs !== null &&
+      jwtAgeMs >= 0 &&
+      jwtAgeMs <= IDLE_TIMEOUT_MS;
+
+    if (clocksMissing && canSeedFromJwt && binding) {
+      const now = Date.now();
+      await stampSessionCookies(supabaseResponse, rememberPreferred, binding, {
+        startedAt: binding.jwtIssuedAtMs ?? now,
+        lastActivityAt: now,
+      });
+    } else if (!clock.ok) {
       await supabase.auth.signOut();
       clearSessionClockCookies(supabaseResponse);
       const reason = clock.reason === "idle" ? "idle" : "expired";
@@ -243,21 +284,6 @@ export async function updateSession(request: NextRequest) {
         supabaseResponse,
         `/login?error=${reason}&next=${encodeURIComponent(pathname)}`
       );
-    }
-
-    const startedRaw = request.cookies.get(SESSION_STARTED_COOKIE)?.value;
-    const lastActivityRaw = request.cookies.get(LAST_ACTIVITY_COOKIE)?.value;
-    const startedAt = Number(startedRaw);
-    const lastActivityAt = Number(lastActivityRaw);
-    const clocksMissing = !Number.isFinite(startedAt) || !Number.isFinite(lastActivityAt);
-
-    // Only seed clocks once; idle/absolute enforcement reads the cookies as-is after that.
-    if (clocksMissing) {
-      const now = Date.now();
-      stampSessionCookies(supabaseResponse, clock.remember, {
-        startedAt: now,
-        lastActivityAt: now,
-      });
     }
 
     const profile = await loadUserProfile(supabase, user.id);

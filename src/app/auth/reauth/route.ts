@@ -2,16 +2,23 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/lib/types/database";
 import {
-  evaluateRecentReauth,
   GENERIC_LOGIN_ERROR,
+  GENERIC_MFA_ERROR,
   getReauthCookieOptions,
   getSupabaseCookieOptions,
   REAUTH_COOKIE,
   REAUTH_MAX_AGE_MS,
   REMEMBER_COOKIE,
   toGenericLoginError,
+  toGenericMfaError,
 } from "@/lib/auth-security";
+import {
+  evaluateRecentReauth,
+  issueReauthCookieValue,
+} from "@/lib/auth-security-server";
 import { runSensitiveHttpAction } from "@/lib/security/rate-limit";
+import { sessionBindingFromAccessToken } from "@/lib/security/session-binding";
+import { redactForLogs } from "@/lib/security/redact";
 
 function createSupabase(request: NextRequest, response: NextResponse) {
   const remember = request.cookies.get(REMEMBER_COOKIE)?.value === "1";
@@ -34,10 +41,21 @@ function createSupabase(request: NextRequest, response: NextResponse) {
   );
 }
 
+async function bindingFor(
+  supabase: ReturnType<typeof createServerClient<Database>>,
+  userId: string
+) {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  return sessionBindingFromAccessToken({
+    userId,
+    accessToken: session?.access_token,
+  });
+}
+
 /**
  * GET /auth/reauth — whether step-up reauthentication is still valid.
- * When MFA is enrolled, a valid cookie alone is not enough unless the session is AAL2
- * (or the client will be asked for a TOTP code).
  */
 export async function GET(request: NextRequest) {
   const response = NextResponse.json({ ok: true, valid: false });
@@ -48,6 +66,11 @@ export async function GET(request: NextRequest) {
 
   if (!user) {
     return NextResponse.json({ ok: false, valid: false, error: "unauthenticated" }, { status: 401 });
+  }
+
+  const binding = await bindingFor(supabase, user.id);
+  if (!binding) {
+    return NextResponse.json({ ok: true, valid: false, reason: "invalid", maxAgeMs: REAUTH_MAX_AGE_MS });
   }
 
   let mfaEnabled = false;
@@ -62,11 +85,11 @@ export async function GET(request: NextRequest) {
     aal2 = false;
   }
 
-  const check = evaluateRecentReauth({
+  const check = await evaluateRecentReauth({
     reauthRaw: request.cookies.get(REAUTH_COOKIE)?.value,
+    binding,
   });
 
-  // Sensitive actions with MFA: need recent reauth AND AAL2.
   const valid = check.ok && (!mfaEnabled || aal2);
 
   if (!valid) {
@@ -92,8 +115,7 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * POST /auth/reauth — confirm password and/or TOTP, then stamp reauthenticated_at.
- * Prefer TOTP when MFA is enrolled (password alone is not enough for those accounts).
+ * POST /auth/reauth — confirm password and/or TOTP, then stamp a signed grant.
  */
 export async function POST(request: NextRequest) {
   let password = "";
@@ -117,6 +139,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "unauthenticated" }, { status: 401 });
   }
 
+  const binding = await bindingFor(supabase, user.id);
+  if (!binding) {
+    return NextResponse.json({ ok: false, error: "unauthenticated" }, { status: 401 });
+  }
+
   let mfaEnabled = false;
   let factorId: string | null = null;
   try {
@@ -131,7 +158,7 @@ export async function POST(request: NextRequest) {
   if (mfaEnabled && factorId) {
     if (!/^\d{6}$/.test(code)) {
       return NextResponse.json(
-        { ok: false, error: "Enter the 6-digit code from your authenticator app.", mfaEnabled: true },
+        { ok: false, error: GENERIC_MFA_ERROR, mfaEnabled: true },
         { status: 400 }
       );
     }
@@ -140,7 +167,14 @@ export async function POST(request: NextRequest) {
         factorId,
       });
       if (challengeError) {
-        return { ok: false as const, status: 400, error: challengeError.message, mfaEnabled: true };
+        console.error(
+          JSON.stringify({
+            type: "mfa_challenge_failed",
+            requestId: crypto.randomUUID(),
+            message: redactForLogs(challengeError.message),
+          })
+        );
+        return { ok: false as const, status: 400, error: GENERIC_MFA_ERROR, mfaEnabled: true };
       }
       const { error: verifyError } = await supabase.auth.mfa.verify({
         factorId,
@@ -148,10 +182,17 @@ export async function POST(request: NextRequest) {
         code,
       });
       if (verifyError) {
+        console.error(
+          JSON.stringify({
+            type: "mfa_verify_failed",
+            requestId: crypto.randomUUID(),
+            message: redactForLogs(verifyError.message),
+          })
+        );
         return {
           ok: false as const,
           status: 401,
-          error: verifyError.message || "Invalid authenticator code.",
+          error: toGenericMfaError(verifyError.message),
           mfaEnabled: true,
         };
       }
@@ -177,6 +218,13 @@ export async function POST(request: NextRequest) {
     });
     if (!gated.ok) return gated.response;
     if (gated.value) {
+      console.error(
+        JSON.stringify({
+          type: "reauth_password_failed",
+          requestId: crypto.randomUUID(),
+          message: redactForLogs(gated.value.message),
+        })
+      );
       return NextResponse.json(
         { ok: false, error: toGenericLoginError(gated.value.message) || GENERIC_LOGIN_ERROR },
         { status: 401 }
@@ -185,6 +233,11 @@ export async function POST(request: NextRequest) {
   }
 
   const now = Date.now();
+  const token = await issueReauthCookieValue({ binding, nowMs: now });
+  if (!token) {
+    return NextResponse.json({ ok: false, error: "unavailable" }, { status: 503 });
+  }
+
   const response = NextResponse.json({
     ok: true,
     valid: true,
@@ -197,7 +250,7 @@ export async function POST(request: NextRequest) {
   cookieJar.cookies.getAll().forEach(({ name, value }) => {
     response.cookies.set(name, value);
   });
-  response.cookies.set(REAUTH_COOKIE, String(now), getReauthCookieOptions());
+  response.cookies.set(REAUTH_COOKIE, token, getReauthCookieOptions());
 
   return response;
 }

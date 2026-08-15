@@ -20,10 +20,12 @@ jobs:
     timeout-minutes: 20
 
     env:
-      # Placeholder values so Next/Prisma can build without secrets.
-      # Do not use production keys in CI.
       DATABASE_URL: file:./ci.db
       AUTH_SECRET: ci-auth-secret-not-for-production
+      SECURITY_COOKIE_SECRET: ci-security-cookie-secret-not-for-production
+      RATE_LIMIT_HMAC_SECRET: ci-rate-limit-hmac-secret-not-for-production
+      SECURITY_EVENT_HMAC_SECRET: ci-security-event-hmac-secret-not-for-production
+      USE_LEGACY_API: "false"
       NEXT_PUBLIC_USE_SUPABASE: "false"
       NEXT_PUBLIC_USE_API: "false"
       NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
@@ -55,7 +57,23 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Dependency audit
+  npm-audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Production high/critical audit
+        run: npm audit --omit=dev --audit-level=high
+      - name: Full high/critical audit
         run: npm audit --audit-level=high
 
   gitleaks:
@@ -92,3 +110,40 @@ jobs:
         uses: github/codeql-action/autobuild@f6091c0113d1dcf9b98e269ee48e8a7e51b7bdd4 # v3.28.5
       - name: Analyze
         uses: github/codeql-action/analyze@f6091c0113d1dcf9b98e269ee48e8a7e51b7bdd4 # v3.28.5
+
+  db-security:
+    name: Database security assertions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: feysefit_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d feysefit_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install psql
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Apply follow-up patch on disposable Postgres
+        env:
+          PGPASSWORD: postgres
+          PGHOST: localhost
+          PGUSER: postgres
+          PGDATABASE: feysefit_ci
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/ci-bootstrap.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/patch-security-audit-followup.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/patch-security-audit-followup-2.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/security-audit-followup.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/security-audit-followup-2.sql
+

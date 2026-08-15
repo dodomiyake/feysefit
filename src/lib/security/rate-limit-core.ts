@@ -1,4 +1,8 @@
+import "server-only";
+
+import { hmacSha256Hex } from "@/lib/security/hmac";
 import { redactForLogs } from "@/lib/security/redact";
+import { getRateLimitHmacSecret } from "@/lib/security/secrets";
 
 export const RATE_LIMITED_CODE = "rate_limited";
 export const RATE_LIMIT_UNAVAILABLE_CODE = "rate_limit_unavailable";
@@ -14,10 +18,25 @@ export const SENSITIVE_RATE_LIMITS = {
   designRequest: { limit: 20, windowSeconds: 60 },
   messagingWrite: { limit: 40, windowSeconds: 60 },
   inviteEmail: { limit: 10, windowSeconds: 60 },
+  inviteLookup: { limit: 20, windowSeconds: 60 },
+  inviteLookupGlobal: { limit: 120, windowSeconds: 60 },
   referencePreview: { limit: 30, windowSeconds: 60 },
 } as const;
 
 export type SensitiveRateLimitKind = keyof typeof SENSITIVE_RATE_LIMITS;
+
+export const RATE_LIMIT_OPERATIONS: Record<SensitiveRateLimitKind, string> = {
+  authAbuse: "auth_abuse",
+  adminMutation: "admin_mutation",
+  securityEvent: "security_event",
+  accountActivity: "account_activity",
+  designRequest: "design_request",
+  messagingWrite: "messaging_write",
+  inviteEmail: "invite_email",
+  inviteLookup: "invite_lookup",
+  inviteLookupGlobal: "invite_lookup_global",
+  referencePreview: "reference_preview",
+};
 
 export type ConsumeRateLimitRpc = (args: {
   p_bucket: string;
@@ -98,16 +117,10 @@ export function interpretConsumeRateLimitResponse(input: {
   );
 }
 
-export async function hashRateLimitBucket(bucket: string): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(bucket)
-  );
-  return Array.from(new Uint8Array(digest), (byte) =>
-    byte.toString(16).padStart(2, "0")
-  )
-    .join("")
-    .slice(0, 64);
+export async function hashRateLimitBucket(bucket: string): Promise<string | null> {
+  const secret = getRateLimitHmacSecret();
+  if (!secret) return null;
+  return (await hmacSha256Hex(secret, bucket)).slice(0, 64);
 }
 
 export async function runWithDurableRateLimit<T>(opts: {
@@ -121,6 +134,12 @@ export async function runWithDurableRateLimit<T>(opts: {
   | { ok: false; decision: DeniedDurableRateLimitDecision }
 > {
   const key = await hashRateLimitBucket(opts.bucket);
+  if (!key) {
+    return {
+      ok: false,
+      decision: unavailableRateLimitDecision("missing_RATE_LIMIT_HMAC_SECRET"),
+    };
+  }
   let rpcResult: { data: unknown; error: { message?: string } | null };
   try {
     rpcResult = await opts.rpc({

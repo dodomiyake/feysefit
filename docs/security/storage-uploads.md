@@ -3,20 +3,35 @@
 ## Implemented
 
 - Private buckets stay private; display uses short-lived signed URLs (`SIGNED_URL_TTL_SECONDS` = 5 minutes).
-- Image uploads sniff magic bytes (JPEG/PNG/WebP/GIF). SVG, HTML, JavaScript, and executable extensions are blocked.
-- JPEG/PNG/WebP are re-encoded in the browser to strip EXIF/GPS before upload. GIF is kept for animation and is **not** re-encoded.
+- GIF is not accepted. Allowed image types are JPEG, PNG, and WebP.
+- Public and project images go through `POST /auth/uploads/promote`:
+  - authenticated session required
+  - server-side magic-byte check
+  - `sharp` decode/re-encode (strips metadata)
+  - max 5MB and 4096×4096 pixels (`limitInputPixels`)
+  - service-role write to the destination bucket
+- Follow-up 2 revokes authenticated `INSERT` on `avatars` and `designer-portfolios`. Direct Storage uploads cannot become public from spoofed `image/*` metadata.
+- Quarantine bucket `uploads-quarantine` is private.
+- **Storage-API cleanup:** `POST /auth/uploads/cleanup-quarantine` with `CRON_SECRET` removes expired objects through `storage.remove()` (counts only in logs).
+- **SQL `app_private.cleanup_quarantine_objects()`** deletes `storage.objects` catalog rows older than 24 hours. That does **not** purge Storage backend bytes. Residual risk until the Storage-API route is scheduled.
 - Object names use `crypto.randomUUID()` rather than the original filename.
-- Storage RLS (`can_read_private_storage_object`) requires the caller to be the owner, an admin, or a project participant.
+- Storage RLS (`can_read_private_storage_object`, **EXECUTE** not SELECT) allows:
+  - the object owner (first path segment = `auth.uid()`)
+  - an AAL2 admin
+  - a participant of the **project UUID** in the path, when the project is not archived and the relationship is active
+- Unscoped legacy paths (`{user_id}/file` with no project UUID) are **not** readable by other project participants. Only the owner or an AAL2 admin.
+
+## Documents
+
+Message documents stay in the private `message-attachments` bucket with `Content-Disposition: attachment` when the Storage API accepts that option. Treat them as untrusted.
 
 ## Not implemented (do not claim)
 
-- **Malware scanning** of document or message attachments. Documents are not quarantined behind a scanner.
-- A dedicated server-side upload proxy that re-validates bytes after the client. Production uploads still go from the browser to Supabase Storage under RLS. Magic-byte checks run in the client; they are not a substitute for a server scanner.
+- **Malware scanning** of document or message attachments.
+- Automatic migration of unscoped private objects into project-scoped paths. Inventory with `supabase/tests/unscoped-storage-inventory.sql` (counts only). Copy to `{user_id}/{project_id}/...`, confirm access, then delete unscoped copies in a later window. Do not auto-move or auto-delete.
 
-## Retention
+## Residual risk
 
-Deleted projects and accounts currently rely on database `ON DELETE` cascades for rows. Object cleanup in Storage is **not** fully automated. Operators must plan a retention job that deletes objects under `{user_id}/` after account deletion and `{user_id}/{project_id}/` after project deletion.
+Direct Storage uploads to remaining private buckets can still bypass re-encode. Those objects are not public. Public image buckets require the promote route after follow-up 2.
 
-## GIF
-
-GIF remains allowed for portfolio/avatars. Treat animated GIF as a residual content-type risk (no EXIF strip, possible oversized frames). Disable it later if product no longer needs animation.
+SQL catalog deletes of quarantine rows can leave Storage backend bytes behind unless `POST /auth/uploads/cleanup-quarantine` is scheduled.

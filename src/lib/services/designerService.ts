@@ -164,11 +164,22 @@ export async function listLiveMarketplaceDesignerIds(): Promise<string[]> {
 
 export async function setDesignerMarketplaceLive(designerProfileId: string, live: boolean) {
   const supabase = createClient();
-  const { error } = await supabase
-    .from("designer_profiles")
-    .update({ marketplace_live: live })
-    .eq("id", designerProfileId);
-  if (error) throw new Error(error.message);
+  if (live) {
+    const { error } = await supabase.rpc("admin_set_marketplace_live", {
+      p_designer_id: designerProfileId,
+      p_live: true,
+    });
+    if (error) throw new Error(error.message);
+  } else {
+    const { error: withdrawError } = await supabase.rpc("withdraw_own_marketplace_listing");
+    if (withdrawError) {
+      const { error } = await supabase.rpc("admin_set_marketplace_live", {
+        p_designer_id: designerProfileId,
+        p_live: false,
+      });
+      if (error) throw new Error(error.message);
+    }
+  }
   return listLiveMarketplaceDesignerIds();
 }
 

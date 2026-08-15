@@ -1,8 +1,11 @@
 /**
  * Client-side auth abuse protection: attempt tracking, cooldowns, and CAPTCHA thresholds.
  * Supabase still applies its own rate limits; this layer improves UX and triggers Turnstile
- * before hitting the provider when possible.
+ * before hitting the provider when possible. Production CAPTCHA fail-closed lives in
+ * captcha-policy.ts. GoTrue Attack Protection is the provider validation boundary.
  */
+
+import { getTurnstileSiteKey, requireCaptchaToken } from "@/lib/security/captcha-policy";
 
 export type AuthAbuseAction =
   | "login"
@@ -118,7 +121,6 @@ export function getAuthAbuseSnapshot(
   action: AuthAbuseAction,
   subject = ""
 ): AuthAbuseSnapshot {
-  const cfg = CONFIG[action];
   const now = Date.now();
   const bucket = pruneWindow(action, readBucket(action, subject), now);
   const retryAfterMs = Math.max(0, bucket.cooldownUntil - now);
@@ -153,10 +155,7 @@ export function assertAuthAttemptAllowed(
 ): string | null {
   const snap = getAuthAbuseSnapshot(action, subject);
   if (snap.limited) return snap.message;
-  if (snap.requiresCaptcha && !captchaToken?.trim()) {
-    return "Complete the security check to prove you are human, then try again.";
-  }
-  return null;
+  return requireCaptchaToken(captchaToken);
 }
 
 export function recordAuthFailure(action: AuthAbuseAction, subject = ""): AuthAbuseSnapshot {
@@ -189,14 +188,7 @@ export function recordAuthSuccess(action: AuthAbuseAction, subject = "") {
   }
 }
 
-export function getTurnstileSiteKey(): string | null {
-  const key = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim();
-  return key || null;
-}
-
-export function isTurnstileConfigured(): boolean {
-  return Boolean(getTurnstileSiteKey());
-}
+export { getTurnstileSiteKey, isTurnstileConfigured } from "@/lib/security/captcha-policy";
 
 export const GENERIC_AUTH_REQUEST_MESSAGE =
   "If an account exists for that email, you will receive a message shortly.";

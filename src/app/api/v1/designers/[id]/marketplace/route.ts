@@ -1,6 +1,6 @@
 import { setDesignerMarketplaceLive } from "@/server/services/designers";
 import { handleApiError, jsonData, jsonError } from "@/server/http";
-import { isAuthError, requireApiRole, requireApiSession } from "@/server/api-auth";
+import { isAuthError, requireApiAdminAal2, requireApiSession } from "@/server/api-auth";
 import { runSensitiveHttpAction } from "@/lib/security/rate-limit";
 
 export async function PATCH(
@@ -14,7 +14,7 @@ export async function PATCH(
     const { id } = await params;
     const isOwner = session.role === "designer" && session.designerId === id;
     if (!isOwner) {
-      const admin = await requireApiRole(["admin"]);
+      const admin = await requireApiAdminAal2();
       if (isAuthError(admin)) return jsonError("Forbidden", 403);
     }
 

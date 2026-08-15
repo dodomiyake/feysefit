@@ -5,10 +5,11 @@ import type { UserRole } from "@/lib/design-tokens";
 import {
   GENERIC_LOGIN_ERROR,
   isPasswordStrongEnough,
+  isRememberSessionEnabled,
+  startAppSession,
   toGenericLoginError,
 } from "@/lib/auth-security";
-import { isTurnstileConfigured } from "@/lib/auth-abuse";
-import { runSensitiveAction } from "@/lib/security/sensitive-rate-limit";
+import { requireCaptchaToken } from "@/lib/security/captcha-policy";
 
 function formatTimestamp() {
   return new Date().toLocaleTimeString("en-GB", {
@@ -27,16 +28,17 @@ export async function signIn(
   password: string,
   options?: { captchaToken?: string | null }
 ) {
+  const captchaBlock = requireCaptchaToken(options?.captchaToken);
+  if (captchaBlock) throw new Error(captchaBlock);
+
   const supabase = createClient();
-  const { data, error } = await runSensitiveAction("authAbuse", email.trim().toLowerCase(), () =>
-    supabase.auth.signInWithPassword({
-      email: email.trim().toLowerCase(),
-      password,
-      options: options?.captchaToken
-        ? { captchaToken: options.captchaToken }
-        : undefined,
-    })
-  );
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email.trim().toLowerCase(),
+    password,
+    options: options?.captchaToken
+      ? { captchaToken: options.captchaToken }
+      : undefined,
+  });
 
   if (error) {
     const msg = error.message.toLowerCase();
@@ -104,31 +106,28 @@ export async function signUp(input: {
   // Turnstile tokens are single-use. Never call Supabase signup without a fresh solved token
   // when CAPTCHA is configured — otherwise accounts can be created while the UI still looks blocked.
   const captchaToken = input.captchaToken?.trim() || "";
-  if (isTurnstileConfigured() && !captchaToken) {
-    throw new Error("Complete the security check to prove you are human, then try again.");
-  }
+  const captchaBlock = requireCaptchaToken(captchaToken);
+  if (captchaBlock) throw new Error(captchaBlock);
 
   const supabase = createClient();
   const origin =
     typeof window !== "undefined" ? window.location.origin : resolveAppOrigin();
   const emailRedirectTo = `${origin}/auth/callback?next=${encodeURIComponent("/verify-email")}`;
 
-  const { data, error } = await runSensitiveAction("authAbuse", input.email.trim().toLowerCase(), () =>
-    supabase.auth.signUp({
-      email: input.email.trim().toLowerCase(),
-      password: input.password,
-      options: {
-        emailRedirectTo,
-        ...(captchaToken ? { captchaToken } : {}),
-        data: {
-          name: input.name.trim(),
-          role: input.role,
-          customer_path: input.customerPath,
-          invite_code: input.inviteCode,
-        },
+  const { data, error } = await supabase.auth.signUp({
+    email: input.email.trim().toLowerCase(),
+    password: input.password,
+    options: {
+      emailRedirectTo,
+      ...(captchaToken ? { captchaToken } : {}),
+      data: {
+        name: input.name.trim(),
+        role: input.role,
+        customer_path: input.customerPath,
+        invite_code: input.inviteCode,
       },
-    })
-  );
+    },
+  });
   if (error) {
     const msg = error.message.toLowerCase();
     if (msg.includes("captcha") || msg.includes("timeout-or-duplicate")) {
@@ -142,7 +141,7 @@ export async function signUp(input: {
         "An account with this email already exists. Sign in instead, or use a different email."
       );
     }
-    throw new Error(error.message);
+    throw new Error(toGenericLoginError(error.message));
   }
   if (!data.user) throw new Error("Signup failed");
 
@@ -181,20 +180,20 @@ export async function resendSignupConfirmation(
 ) {
   const normalized = email.trim().toLowerCase();
   if (!normalized) throw new Error("Email is required.");
+  const captchaBlock = requireCaptchaToken(options?.captchaToken);
+  if (captchaBlock) throw new Error(captchaBlock);
 
   const supabase = createClient();
   const origin =
     typeof window !== "undefined" ? window.location.origin : resolveAppOrigin();
-  const { error } = await runSensitiveAction("authAbuse", normalized, () =>
-    supabase.auth.resend({
+  const { error } = await supabase.auth.resend({
       type: "signup",
       email: normalized,
       options: {
         emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent("/verify-email")}`,
         captchaToken: options?.captchaToken?.trim() || undefined,
       },
-    })
-  );
+    });
   // Always present a generic outcome to callers (anti-enumeration).
   if (error) {
     console.error("resendSignupConfirmation:", error.message);
@@ -207,18 +206,18 @@ export async function resetPasswordForEmail(
 ) {
   const normalized = email.trim().toLowerCase();
   if (!normalized) throw new Error("Email is required.");
+  const captchaBlock = requireCaptchaToken(options?.captchaToken);
+  if (captchaBlock) throw new Error(captchaBlock);
 
   const supabase = createClient();
   const origin =
     typeof window !== "undefined" ? window.location.origin : resolveAppOrigin();
   const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent("/reset-password")}`;
 
-  const { error } = await runSensitiveAction("authAbuse", normalized, () =>
-    supabase.auth.resetPasswordForEmail(normalized, {
-      redirectTo,
-      captchaToken: options?.captchaToken?.trim() || undefined,
-    })
-  );
+  const { error } = await supabase.auth.resetPasswordForEmail(normalized, {
+    redirectTo,
+    captchaToken: options?.captchaToken?.trim() || undefined,
+  });
   // Always present a generic outcome to the UI caller.
   if (error) {
     console.error("resetPasswordForEmail:", error.message);
@@ -350,7 +349,7 @@ export async function updatePassword(newPassword: string) {
 
   const supabase = createClient();
   const { error } = await supabase.auth.updateUser({ password: newPassword });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(toGenericLoginError(error.message));
 
   try {
     await supabase.rpc("mark_password_changed");
@@ -360,6 +359,7 @@ export async function updatePassword(newPassword: string) {
 
   // Invalidate other devices / sessions after password change.
   await supabase.auth.signOut({ scope: "others" });
+  await startAppSession(isRememberSessionEnabled());
 }
 
 /** End every refresh session except the current browser. */

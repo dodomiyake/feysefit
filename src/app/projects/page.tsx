@@ -14,7 +14,7 @@ import { useCustomerActiveProject } from "@/lib/use-customer-project";
 
 export default function ProjectsListPage() {
   const router = useRouter();
-  const { projects, role, hydrated, projectsReady, syncProjects } = useApp();
+  const { role, hydrated, projectsReady, syncProjects } = useApp();
   const dashboardHref = useDashboardHref();
   const activeProject = useCustomerActiveProject();
   const isCustomer = role === "customer";

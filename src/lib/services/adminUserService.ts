@@ -1,6 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
 import { mapProject } from "@/lib/supabase/mappers";
-import { runSensitiveAction } from "@/lib/security/sensitive-rate-limit";
 import type { CustomerLinkState } from "@/lib/customer-access";
 import type { MarketplaceApproval } from "@/lib/marketplace-approvals";
 import type { Customer, Designer, Project } from "@/lib/mock-data";
@@ -136,12 +135,10 @@ export async function adminSetDesignerMarketplaceLive(designerKey: string, live:
   if (!profileUuid) throw new Error("Designer not found");
 
   const supabase = createClient();
-  const { error } = await runSensitiveAction("adminMutation", profileUuid, () =>
-    supabase
-      .from("designer_profiles")
-      .update({ marketplace_live: live, updated_at: new Date().toISOString() })
-      .eq("id", profileUuid)
-  );
+  const { error } = await supabase.rpc("admin_set_marketplace_live", {
+    p_designer_id: profileUuid,
+    p_live: live,
+  });
   if (error) throw new Error(error.message);
 
   return listLiveMarketplaceDesignerIds();
@@ -188,12 +185,10 @@ export async function updateAdminCustomerNotes(customerKey: string, adminNotes: 
   if (!profileUuid) throw new Error("Customer not found");
 
   const supabase = createClient();
-  const { error } = await runSensitiveAction("adminMutation", profileUuid, () =>
-    supabase
-      .from("customer_profiles")
-      .update({ admin_notes: adminNotes || null, updated_at: new Date().toISOString() })
-      .eq("id", profileUuid)
-  );
+  const { error } = await supabase
+    .from("customer_profiles")
+    .update({ admin_notes: adminNotes || null, updated_at: new Date().toISOString() })
+    .eq("id", profileUuid);
   if (error) throw new Error(error.message);
 }
 
@@ -202,11 +197,9 @@ export async function updateAdminDesignerNotes(designerKey: string, adminNotes: 
   if (!profileUuid) throw new Error("Designer not found");
 
   const supabase = createClient();
-  const { error } = await runSensitiveAction("adminMutation", profileUuid, () =>
-    supabase.rpc("admin_set_designer_notes", {
-      p_designer_id: profileUuid,
-      p_notes: adminNotes,
-    })
-  );
+  const { error } = await supabase.rpc("admin_set_designer_notes", {
+    p_designer_id: profileUuid,
+    p_notes: adminNotes,
+  });
   if (error) throw new Error(error.message);
 }
