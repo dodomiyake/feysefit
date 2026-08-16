@@ -10,6 +10,7 @@ import {
   recordAuthFailure,
   recordAuthSuccess,
 } from "@/lib/auth-abuse";
+import { storeOneTimeToken, takeOneTimeToken } from "@/lib/security/captcha-token";
 
 declare global {
   interface Window {
@@ -85,6 +86,7 @@ export function useAuthAbuseGuard(action: AuthAbuseAction, subject: string) {
   const [hostEl, setHostEl] = useState<HTMLDivElement | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | null>(null);
+  const captchaTokenRef = useRef<string | null>(null);
   const siteKey = getTurnstileSiteKey();
   const showCaptcha = isTurnstileConfigured();
 
@@ -113,6 +115,7 @@ export function useAuthAbuseGuard(action: AuthAbuseAction, subject: string) {
     if (!showCaptcha || !siteKey) {
       const idle = window.setTimeout(() => {
         setCaptchaStatus("idle");
+        storeOneTimeToken(captchaTokenRef, null);
         setCaptchaToken(null);
       }, 0);
       return () => window.clearTimeout(idle);
@@ -125,6 +128,7 @@ export function useAuthAbuseGuard(action: AuthAbuseAction, subject: string) {
     let cancelled = false;
     const loading = window.setTimeout(() => {
       setCaptchaStatus("loading");
+      storeOneTimeToken(captchaTokenRef, null);
       setCaptchaToken(null);
     }, 0);
 
@@ -152,14 +156,16 @@ export function useAuthAbuseGuard(action: AuthAbuseAction, subject: string) {
           appearance: "always",
           size: "flexible",
           callback: (token) => {
-            setCaptchaToken(token);
+            setCaptchaToken(storeOneTimeToken(captchaTokenRef, token));
             setCaptchaStatus("solved");
           },
           "expired-callback": () => {
+            storeOneTimeToken(captchaTokenRef, null);
             setCaptchaToken(null);
             setCaptchaStatus("ready");
           },
           "error-callback": () => {
+            storeOneTimeToken(captchaTokenRef, null);
             setCaptchaToken(null);
             setCaptchaStatus("error");
           },
@@ -168,6 +174,7 @@ export function useAuthAbuseGuard(action: AuthAbuseAction, subject: string) {
       } catch {
         if (!cancelled) {
           setCaptchaStatus("error");
+          storeOneTimeToken(captchaTokenRef, null);
           setCaptchaToken(null);
         }
       }
@@ -190,6 +197,7 @@ export function useAuthAbuseGuard(action: AuthAbuseAction, subject: string) {
   }, [showCaptcha, siteKey, hostEl]);
 
   const resetCaptcha = useCallback(() => {
+    storeOneTimeToken(captchaTokenRef, null);
     setCaptchaToken(null);
     setCaptchaStatus((current) => (current === "idle" ? current : "ready"));
     if (widgetIdRef.current && window.turnstile) {
@@ -202,25 +210,18 @@ export function useAuthAbuseGuard(action: AuthAbuseAction, subject: string) {
   }, []);
 
   /**
-   * Take the current token for a single auth request and immediately clear/reset
-   * the widget. Turnstile tokens are single-use — leaving "Success!" visible after
-   * submit made retries look valid while sending an already-consumed token.
+   * Atomically take the current token for one auth request. Do not reset the
+   * widget here: the provider must be allowed to verify this token first.
+   * onSuccess/onFailure reset the widget after the request settles.
    */
   const consumeCaptchaToken = useCallback(() => {
-    const token = captchaToken?.trim() || null;
+    const token = takeOneTimeToken(captchaTokenRef);
     setCaptchaToken(null);
     if (token) {
       setCaptchaStatus((current) => (current === "idle" ? current : "ready"));
-      if (widgetIdRef.current && window.turnstile) {
-        try {
-          window.turnstile.reset(widgetIdRef.current);
-        } catch {
-          // ignore
-        }
-      }
     }
     return token;
-  }, [captchaToken]);
+  }, []);
 
   const precheck = useCallback(() => {
     return assertAuthAttemptAllowed(action, subject, captchaToken);
