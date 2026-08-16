@@ -83,14 +83,6 @@ export function AdminMarketplaceReview({ approvalId }: AdminMarketplaceReviewPro
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/dashboard/admin/marketplace-approvals"
-        className="inline-flex items-center gap-2 text-sm font-medium text-primary/60 transition-colors hover:text-accent"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to queue
-      </Link>
-
       {profile.riskFlags.length > 0 && (
         <div className="flex gap-3 rounded-xl border border-amber-200/80 bg-amber-50 px-4 py-4 text-sm text-amber-950">
           <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
@@ -112,25 +104,34 @@ export function AdminMarketplaceReview({ approvalId }: AdminMarketplaceReviewPro
               <Image src={profile.coverImage} alt="" fill className="object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
             </div>
-            <div className="relative px-5 pb-5 pt-0">
-              <div className="-mt-10 flex flex-wrap items-end gap-4">
-                <div className="relative h-20 w-20 overflow-hidden rounded-full border-4 border-card shadow-md">
-                  <Image src={profile.profileImage} alt={profile.designerName} fill className="object-cover" />
-                </div>
-                <div className="min-w-0 flex-1 pb-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="font-headline text-xl font-bold text-primary">{profile.businessName}</h2>
-                    {profile.isRegistered ? (
-                      <Badge variant="gold">Registered</Badge>
-                    ) : (
-                      <Badge variant="outline">Unverified applicant</Badge>
-                    )}
-                  </div>
-                  <p className="text-sm text-primary/60">by {profile.designerName}</p>
-                </div>
+            <div className="relative px-5 pb-5">
+              <div className="absolute -top-10 left-5 h-20 w-20 overflow-hidden rounded-full border-4 border-card bg-card shadow-md">
+                <Image
+                  src={profile.profileImage}
+                  alt={profile.designerName}
+                  fill
+                  sizes="80px"
+                  className="object-cover"
+                />
               </div>
 
-              <div className="mt-5 flex flex-wrap gap-4 text-sm text-primary/65">
+              <div className="min-h-20 min-w-0 pl-24 pt-4">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <h2 className="font-headline text-xl font-bold leading-tight text-primary">
+                    {profile.businessName}
+                  </h2>
+                  {profile.isRegistered ? (
+                    <Badge variant="gold">Registered</Badge>
+                  ) : (
+                    <Badge variant="outline">Unverified applicant</Badge>
+                  )}
+                </div>
+                <p className="mt-1 text-sm leading-tight text-primary/60">
+                  by {profile.designerName}
+                </p>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-4 text-sm text-primary/65">
                 <span className="inline-flex items-center gap-1.5">
                   <MapPin className="h-4 w-4 text-accent" />
                   {profile.location}
