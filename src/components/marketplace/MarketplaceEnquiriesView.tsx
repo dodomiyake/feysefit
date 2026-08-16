@@ -7,6 +7,8 @@ import {
   AlertTriangle,
   CalendarDays,
   Check,
+  ChevronDown,
+  ChevronRight,
   Clock3,
   Inbox,
   Loader2,
@@ -18,6 +20,8 @@ import { useApp } from "@/context/AppContext";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { TextArea } from "@/components/ui/TextArea";
+import { useMarketplaceEnquiriesRealtime } from "@/hooks/useMarketplaceEnquiriesRealtime";
+import { isSupabaseEnabled } from "@/lib/config/backend";
 import {
   displayMarketplaceEnquiryStatus,
   marketplaceEnquiryCanBeAnswered,
@@ -46,6 +50,7 @@ const statusVariant: Record<MarketplaceEnquiryStatus, "gold" | "outline" | "defa
   pending: "outline",
   discussing: "outline",
   accepted: "gold",
+  unlinked: "default",
   declined: "default",
   cancelled: "default",
   expired: "default",
@@ -85,20 +90,26 @@ async function fetchEnquiriesWithMessages(): Promise<{
 export function MarketplaceEnquiriesView() {
   const router = useRouter();
   const { role, authUser, showToast, refreshAppData } = useApp();
+  const useSupabase = isSupabaseEnabled();
   const [enquiries, setEnquiries] = useState<MarketplaceEnquiry[]>([]);
   const [messagesByEnquiry, setMessagesByEnquiry] = useState<
     Record<string, MarketplaceEnquiryMessage[]>
   >({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(() =>
+    typeof window === "undefined"
+      ? null
+      : new URLSearchParams(window.location.search).get("enquiry")
+  );
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<{
     enquiryId: string;
     action: "customer-agreement" | "designer-link";
   } | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const { enquiries: items, messages } = await fetchEnquiriesWithMessages();
       setEnquiries(items);
@@ -106,7 +117,7 @@ export function MarketplaceEnquiriesView() {
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Could not load enquiries.", "error");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [showToast]);
 
@@ -131,6 +142,16 @@ export function MarketplaceEnquiriesView() {
       cancelled = true;
     };
   }, [role, showToast]);
+
+  const handleRealtimeChange = useCallback(() => {
+    void load(true);
+  }, [load]);
+
+  useMarketplaceEnquiriesRealtime(
+    useSupabase && Boolean(authUser) && (role === "customer" || role === "designer"),
+    handleRealtimeChange,
+    "enquiry-page-live"
+  );
 
   const sendReply = async (enquiry: MarketplaceEnquiry) => {
     const body = drafts[enquiry.id]?.trim() ?? "";
@@ -299,35 +320,61 @@ export function MarketplaceEnquiriesView() {
                 : marketplaceEnquiryStatusLabel[status];
             const confirmationForEnquiry =
               confirmation?.enquiryId === enquiry.id ? confirmation.action : null;
+            const expanded = expandedId === enquiry.id;
 
             return (
               <article
                 key={enquiry.id}
-                className="rounded-2xl border border-primary/10 bg-card p-5 shadow-warm lg:p-7"
+                className="overflow-hidden rounded-2xl border border-primary/10 bg-card shadow-warm"
               >
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setExpandedId(expanded ? null : enquiry.id)}
+                  className="flex w-full items-start gap-3 px-5 py-4 text-left transition-colors hover:bg-primary/[0.025] lg:px-6"
+                  aria-expanded={expanded}
+                  aria-controls={`enquiry-details-${enquiry.id}`}
+                >
+                  <span className="mt-1 shrink-0 text-primary/45">
+                    {expanded ? (
+                      <ChevronDown className="h-5 w-5" />
+                    ) : (
+                      <ChevronRight className="h-5 w-5" />
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-2">
                       <Badge variant={statusVariant[status]}>{statusLabel}</Badge>
-                      {enquiry.customerAgreedAt && status === "pending" && (
+                      {enquiry.customerAgreedAt && status === "discussing" && (
                         <Badge variant="gold">Client ready</Badge>
                       )}
                       <span className="text-xs text-primary/45">
-                        Sent {formatDate(enquiry.createdAt)}
+                        {formatDate(enquiry.createdAt)}
                       </span>
-                    </div>
-                    <h2 className="mt-3 font-headline text-xl font-semibold text-primary">
-                      {enquiry.outfitType}
-                    </h2>
-                    <p className="mt-1 text-sm font-medium text-primary/70">
+                    </span>
+                    <span className="mt-2 block truncate text-sm font-semibold text-primary">
                       {role === "designer" ? enquiry.customerName : enquiry.designerName}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-primary/55">
+                      <span className="font-normal text-primary/45"> · </span>
+                      {enquiry.outfitType}
+                    </span>
+                    <span className="mt-1 block truncate text-sm text-primary/55">
+                      {messages.at(-1)?.body ?? enquiry.description}
+                    </span>
+                  </span>
+                  <span className="hidden shrink-0 items-center gap-2 pt-1 text-xs text-primary/50 sm:flex">
+                    <CalendarDays className="h-4 w-4" />
+                    {formatDate(enquiry.preferredDeadline)}
+                  </span>
+                </button>
+
+                {expanded && (
+                <div
+                  id={`enquiry-details-${enquiry.id}`}
+                  className="border-t border-primary/10 px-5 pb-5 pt-1 lg:px-7 lg:pb-7"
+                >
+                  <div className="mt-4 flex items-center gap-2 text-xs text-primary/55 sm:hidden">
                     <CalendarDays className="h-4 w-4" />
                     Preferred deadline: {formatDate(enquiry.preferredDeadline)}
                   </div>
-                </div>
 
                 <p className="mt-5 whitespace-pre-wrap text-sm leading-relaxed text-primary/70">
                   {enquiry.description}
@@ -361,7 +408,11 @@ export function MarketplaceEnquiriesView() {
                     <MessageSquare className="h-4 w-4 text-accent" />
                     <h3 className="text-sm font-semibold text-primary">Enquiry conversation</h3>
                     <span className="text-xs text-primary/45">
-                      {status === "accepted" ? "Accounts linked" : "Accounts are not linked"}
+                      {status === "accepted"
+                        ? "Accounts linked"
+                        : status === "unlinked"
+                          ? "Link ended · conversation archived"
+                          : "Accounts are not linked"}
                     </span>
                   </div>
 
@@ -568,6 +619,8 @@ export function MarketplaceEnquiriesView() {
                     </span>
                   )}
                 </div>
+                </div>
+                )}
               </article>
             );
           })}

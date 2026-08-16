@@ -75,7 +75,7 @@ export default function CustomerDashboardClient() {
         <div className="mb-6 lg:hidden">
           <h1 className="font-headline text-2xl font-bold text-primary">Welcome back, {firstName}</h1>
           <p className="mt-2 text-sm leading-relaxed text-primary/60">
-            {activeProject
+            {activeProject && customerLink.linkedDesignerId
               ? awaitingConfirmation
                 ? isRedelivery
                   ? `${activeProject.title} has been redelivered — please confirm receipt when you're ready.`
@@ -85,7 +85,9 @@ export default function CustomerDashboardClient() {
                   : isPostDelivery
                     ? `Your designer is following up on your delivery concern for ${activeProject.title}.`
                     : `Your bespoke journey is progressing beautifully. Your designer is currently finalizing the details of your ${activeProject.title}.`
-              : "Your bespoke journey starts here. Link with your designer to see project updates."}
+              : activeProject
+                ? "Your previous commission is archived. Its history remains available read-only."
+                : "Your bespoke journey starts here. Link with your designer to see project updates."}
           </p>
         </div>
 
@@ -186,11 +188,6 @@ export default function CustomerDashboardClient() {
                 )}
               </div>
             </div>
-
-            <CustomerProjectTimeline
-              key={`${activeProject.id}-${activeProject.status}`}
-              projectId={activeProject.id}
-            />
 
             <CustomerProjectItemsPreview project={activeProject} />
 

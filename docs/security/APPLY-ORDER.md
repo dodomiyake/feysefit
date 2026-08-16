@@ -52,6 +52,7 @@ Then, in a **staging** SQL editor, entire files from line 1:
 6. `supabase/patch-security-audit-followup-4.sql` (routes designer ownership policies through `current_designer_profile_id()` without restoring private `designer_profiles.user_id` access).
 7. `supabase/patch-marketplace-enquiries.sql` (pending enquiry records, pair-scoped linking, and atomic project creation).
 8. `supabase/patch-marketplace-enquiry-conversations.sql` (designer acceptance-for-discussion, participant-only pre-link replies, client agreement confirmation, and explicit designer finalisation). Deploy the matching application in the same release; accepting for discussion or replying cannot create a relationship, and the legacy immediate-link RPC remains revoked.
+9. `supabase/patch-marketplace-enquiry-live-unlink.sql` (live enquiry/message notifications and automatic accepted → unlinked archival when the relationship ends).
 
 Limiter for the application is now:
 
@@ -103,6 +104,7 @@ Deploy from `security/hardening-pass` only after step 2 created
 ## Rollback order (reverse)
 
 For the enquiry release, stop the matching application deploy first, then run
+`supabase/rollback-marketplace-enquiry-live-unlink.sql`,
 `supabase/rollback-marketplace-enquiry-conversations.sql`, followed by
 `supabase/rollback-marketplace-enquiries.sql`. The rollback deliberately does
 not restore browser relationship writes or the legacy immediate-link RPC.

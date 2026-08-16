@@ -2,6 +2,7 @@ export type MarketplaceEnquiryStatus =
   | "pending"
   | "discussing"
   | "accepted"
+  | "unlinked"
   | "declined"
   | "cancelled"
   | "expired";
@@ -52,6 +53,7 @@ export const marketplaceEnquiryStatusLabel: Record<MarketplaceEnquiryStatus, str
   pending: "Awaiting designer",
   discussing: "In discussion",
   accepted: "Accepted",
+  unlinked: "Unlinked",
   declined: "Declined",
   cancelled: "Cancelled",
   expired: "Expired",

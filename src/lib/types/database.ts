@@ -216,6 +216,7 @@ export interface Database {
             | "pending"
             | "discussing"
             | "accepted"
+            | "unlinked"
             | "declined"
             | "cancelled"
             | "expired";

@@ -10,9 +10,15 @@ import { isSupabaseEnabled } from "@/lib/config/backend";
 import { listMessageNotifications } from "@/lib/services/messageService";
 import { useProjectMessagesRealtime } from "@/hooks/useProjectMessagesRealtime";
 import { useProjectsRealtime } from "@/hooks/useProjectsRealtime";
+import { useMarketplaceEnquiriesRealtime } from "@/hooks/useMarketplaceEnquiriesRealtime";
+import {
+  listMarketplaceEnquiries,
+  listMarketplaceEnquiryMessages,
+} from "@/lib/services/marketplaceEnquiryService";
 import type { ThreadMessage } from "@/lib/conversations";
 import {
   buildNotifications,
+  buildMarketplaceEnquiryNotifications,
   readStoredNotificationIds,
   storeReadNotificationIds,
   type AppNotification,
@@ -22,6 +28,12 @@ interface NotificationButtonProps {
   /** Mobile top bar uses fixed panel positioning */
   variant?: "header" | "mobile";
   className?: string;
+}
+
+async function fetchEnquiryNotifications(role: "designer" | "customer") {
+  const enquiries = await listMarketplaceEnquiries();
+  const messages = await listMarketplaceEnquiryMessages(enquiries.map((item) => item.id));
+  return buildMarketplaceEnquiryNotifications(enquiries, messages, role);
 }
 
 export function NotificationButton({ variant = "header", className }: NotificationButtonProps) {
@@ -44,6 +56,7 @@ export function NotificationButton({ variant = "header", className }: Notificati
     typeof window === "undefined" ? [] : readStoredNotificationIds()
   );
   const [messageNotifications, setMessageNotifications] = useState<AppNotification[]>([]);
+  const [enquiryNotifications, setEnquiryNotifications] = useState<AppNotification[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const loadMessageNotifications = useCallback(async () => {
@@ -59,6 +72,21 @@ export function NotificationButton({ variant = "header", className }: Notificati
     }
   }, [authUser, useSupabase]);
 
+  const loadEnquiryNotifications = useCallback(async () => {
+    if (
+      !useSupabase ||
+      !authUser ||
+      (role !== "designer" && role !== "customer")
+    ) {
+      return;
+    }
+    try {
+      setEnquiryNotifications(await fetchEnquiryNotifications(role));
+    } catch {
+      setEnquiryNotifications([]);
+    }
+  }, [authUser, role, useSupabase]);
+
   useEffect(() => {
     if (!useSupabase || !authUser) return;
     let cancelled = false;
@@ -73,6 +101,25 @@ export function NotificationButton({ variant = "header", className }: Notificati
       cancelled = true;
     };
   }, [authUser, useSupabase]);
+
+  useEffect(() => {
+    if (
+      !useSupabase ||
+      !authUser ||
+      (role !== "designer" && role !== "customer")
+    ) return;
+    let cancelled = false;
+    void fetchEnquiryNotifications(role)
+      .then((items) => {
+        if (!cancelled) setEnquiryNotifications(items);
+      })
+      .catch(() => {
+        if (!cancelled) setEnquiryNotifications([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser, role, useSupabase]);
 
   useEffect(() => {
     if (!open || !useSupabase || !authUser) return;
@@ -115,6 +162,16 @@ export function NotificationButton({ variant = "header", className }: Notificati
     "project-notifications-live"
   );
 
+  const handleEnquiryChange = useCallback(() => {
+    void loadEnquiryNotifications();
+  }, [loadEnquiryNotifications]);
+
+  useMarketplaceEnquiriesRealtime(
+    useSupabase && hydrated && Boolean(authUser) && (role === "designer" || role === "customer"),
+    handleEnquiryChange,
+    "enquiry-notifications-live"
+  );
+
   const staticNotifications = useMemo(() => {
     if (!hydrated) return [];
     return buildNotifications({
@@ -144,13 +201,17 @@ export function NotificationButton({ variant = "header", className }: Notificati
   const notifications = useMemo(() => {
     const seen = new Set<string>();
     const merged: AppNotification[] = [];
-    for (const item of [...messageNotifications, ...staticNotifications]) {
+    for (const item of [
+      ...enquiryNotifications,
+      ...messageNotifications,
+      ...staticNotifications,
+    ]) {
       if (seen.has(item.id)) continue;
       seen.add(item.id);
       merged.push(item);
     }
     return merged;
-  }, [messageNotifications, staticNotifications]);
+  }, [enquiryNotifications, messageNotifications, staticNotifications]);
 
   const unread = useMemo(
     () => notifications.filter((n) => !readIds.includes(n.id)),
@@ -181,6 +242,12 @@ export function NotificationButton({ variant = "header", className }: Notificati
     markRead(notification.id);
     setOpen(false);
     router.push(notification.href);
+  };
+
+  const handleToggle = () => {
+    const willOpen = !open;
+    setOpen(willOpen);
+    if (willOpen) void loadEnquiryNotifications();
   };
 
   useEffect(() => {
@@ -224,7 +291,7 @@ export function NotificationButton({ variant = "header", className }: Notificati
     <div ref={containerRef} className={cn("relative", className)}>
       <button
         type="button"
-        onClick={() => setOpen((value) => !value)}
+        onClick={handleToggle}
         className="relative rounded-full p-2 text-primary transition-colors hover:bg-primary/5"
         aria-label="Notifications"
         aria-expanded={open}
@@ -302,7 +369,13 @@ export function NotificationButton({ variant = "header", className }: Notificati
           {notifications.length > 0 && (
             <div className="border-t border-primary/10 px-4 py-2.5">
               <Link
-                href={role === "admin" ? "/dashboard/admin" : "/messages"}
+                href={
+                  role === "admin"
+                    ? "/dashboard/admin"
+                    : enquiryNotifications.length > 0
+                      ? "/enquiries"
+                      : "/messages"
+                }
                 onClick={() => setOpen(false)}
                 className="text-xs font-medium text-accent hover:underline"
               >

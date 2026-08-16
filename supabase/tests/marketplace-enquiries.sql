@@ -115,6 +115,25 @@ begin
   if status_constraint_count <> 1 then
     raise exception 'FAIL: enquiry status does not include the pre-link discussion stage';
   end if;
+
+  select count(*)::integer into status_constraint_count
+  from pg_constraint
+  where conrelid = 'public.marketplace_enquiries'::regclass
+    and contype = 'c'
+    and position('unlinked' in lower(pg_get_constraintdef(oid))) > 0;
+  if status_constraint_count <> 1 then
+    raise exception 'FAIL: enquiry status does not include the archived unlink state';
+  end if;
+
+  if not exists (
+    select 1
+    from pg_trigger
+    where tgrelid = 'public.designer_customer_relationships'::regclass
+      and tgname = 'trg_archive_marketplace_enquiry_on_unlink'
+      and not tgisinternal
+  ) then
+    raise exception 'FAIL: relationship unlink does not archive accepted enquiries';
+  end if;
 end $$;
 
 do $$

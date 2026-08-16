@@ -80,6 +80,15 @@ test("accepted enquiries are immutable and may point to one project", () => {
   assert.equal(item.projectId, "project-1");
 });
 
+test("an unlinked enquiry remains archived and cannot restart collaboration", () => {
+  const item = enquiry({ status: "unlinked", projectId: "project-1" });
+  assert.equal(displayMarketplaceEnquiryStatus(item), "unlinked");
+  assert.equal(marketplaceEnquiryCanBeAnswered(item), false);
+  assert.equal(marketplaceEnquiryCanBeDiscussed(item), false);
+  assert.equal(marketplaceEnquiryCanBeCancelled(item), false);
+  assert.equal(marketplaceEnquiryCanBeLinked(item), false);
+});
+
 test("a client cannot confirm before the designer replies", () => {
   const item = enquiry({ status: "discussing" });
   assert.equal(marketplaceEnquiryCanConfirmCustomerAgreement(item, []), false);
