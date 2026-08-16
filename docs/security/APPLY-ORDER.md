@@ -47,7 +47,7 @@ Then, in a **staging** SQL editor, entire files from line 1:
 1. Optional read-only check: `supabase/tests/staging-preflight.sql`
 2. If the first hardening pass is not on this project, apply those four files.
 3. `supabase/patch-security-audit-followup.sql` (additive follow-up from the second audit)
-4. `supabase/patch-security-audit-followup-2.sql` (account-activity EXECUTE, database cleanup, public-image INSERT revoke). This file **raises** if `app_private` or `consume_rate_limit_server` from follow-up 1 are missing. Quarantine objects are deleted through the Storage API endpoint, never direct SQL.\n5. `supabase/patch-security-audit-followup-3.sql` (authenticated-only helper policies and anonymous marketplace reads).
+4. `supabase/patch-security-audit-followup-2.sql` (account-activity EXECUTE, database cleanup, public-image INSERT revoke). This file **raises** if `app_private` or `consume_rate_limit_server` from follow-up 1 are missing. Quarantine objects are deleted through the Storage API endpoint, never direct SQL.\n5. `supabase/patch-security-audit-followup-3.sql` (authenticated-only helper policies and anonymous marketplace reads).\n6. `supabase/patch-security-audit-followup-4.sql` (routes designer ownership policies through `current_designer_profile_id()` without restoring private `designer_profiles.user_id` access).
 
 Limiter for the application is now:
 
