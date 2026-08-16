@@ -184,6 +184,13 @@ jobs:
           PGUSER: postgres
           PGDATABASE: feysefit_ci
         run: psql -v ON_ERROR_STOP=1 -f supabase/patch-security-audit-followup-3.sql
+      - name: Apply security audit follow-up 4
+        env:
+          PGPASSWORD: postgres
+          PGHOST: localhost
+          PGUSER: postgres
+          PGDATABASE: feysefit_ci
+        run: psql -v ON_ERROR_STOP=1 -f supabase/patch-security-audit-followup-4.sql
       - name: Assert security audit follow-up 1
         env:
           PGPASSWORD: postgres
@@ -205,3 +212,10 @@ jobs:
           PGUSER: postgres
           PGDATABASE: feysefit_ci
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/security-audit-followup-3.sql
+      - name: Assert security audit follow-up 4
+        env:
+          PGPASSWORD: postgres
+          PGHOST: localhost
+          PGUSER: postgres
+          PGDATABASE: feysefit_ci
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/security-audit-followup-4.sql
