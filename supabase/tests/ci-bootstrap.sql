@@ -286,6 +286,7 @@ create table if not exists public.projects (
   title text not null,
   customer_name text not null,
   customer_id uuid,
+  studio_client_id uuid,
   designer_id uuid not null,
   outfit_type text not null,
   deadline text not null,
