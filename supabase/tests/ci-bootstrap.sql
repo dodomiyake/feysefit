@@ -191,6 +191,48 @@ create table if not exists public.designer_customer_relationships (
 );
 alter table public.designer_customer_relationships enable row level security;
 
+-- Baseline ownership helpers required by the project-policy hardening patches.
+-- The disposable fixture keeps the studio-client path closed because it does
+-- not model that feature's table.
+create or replace function public.designer_owns_active_customer_link(
+  p_designer_id uuid,
+  p_customer_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$
+  select
+    p_designer_id is not null
+    and p_customer_id is not null
+    and auth.uid() is not null
+    and exists (
+      select 1
+      from public.designer_profiles d
+      where d.id = p_designer_id
+        and d.user_id = auth.uid()
+    )
+    and exists (
+      select 1
+      from public.designer_customer_relationships r
+      where r.designer_id = p_designer_id
+        and r.customer_id = p_customer_id
+        and r.is_active = true
+    )
+$$;
+
+create or replace function public.designer_owns_studio_client(
+  p_studio_client_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$ select false $$;
+
 do $$ begin
   create type public.invite_status as enum ('pending', 'accepted', 'expired');
 exception when duplicate_object then null;
