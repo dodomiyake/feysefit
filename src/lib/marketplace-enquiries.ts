@@ -1,5 +1,6 @@
 export type MarketplaceEnquiryStatus =
   | "pending"
+  | "discussing"
   | "accepted"
   | "declined"
   | "cancelled"
@@ -21,14 +22,27 @@ export interface MarketplaceEnquiry {
   projectId: string | null;
   expiresAt: string;
   acceptedAt: string | null;
+  customerAgreedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface MarketplaceEnquiryMessage {
+  id: string;
+  enquiryId: string;
+  senderRole: "customer" | "designer";
+  senderName: string;
+  body: string;
+  createdAt: string;
 }
 
 export function displayMarketplaceEnquiryStatus(
   enquiry: Pick<MarketplaceEnquiry, "status" | "expiresAt">
 ): MarketplaceEnquiryStatus {
-  if (enquiry.status === "pending" && Date.parse(enquiry.expiresAt) <= Date.now()) {
+  if (
+    (enquiry.status === "pending" || enquiry.status === "discussing") &&
+    Date.parse(enquiry.expiresAt) <= Date.now()
+  ) {
     return "expired";
   }
   return enquiry.status;
@@ -36,6 +50,7 @@ export function displayMarketplaceEnquiryStatus(
 
 export const marketplaceEnquiryStatusLabel: Record<MarketplaceEnquiryStatus, string> = {
   pending: "Awaiting designer",
+  discussing: "In discussion",
   accepted: "Accepted",
   declined: "Declined",
   cancelled: "Cancelled",
@@ -43,9 +58,32 @@ export const marketplaceEnquiryStatusLabel: Record<MarketplaceEnquiryStatus, str
 };
 
 export function marketplaceEnquiryCanBeCancelled(enquiry: MarketplaceEnquiry): boolean {
-  return displayMarketplaceEnquiryStatus(enquiry) === "pending";
+  const status = displayMarketplaceEnquiryStatus(enquiry);
+  return status === "pending" || status === "discussing";
 }
 
 export function marketplaceEnquiryCanBeAnswered(enquiry: MarketplaceEnquiry): boolean {
   return displayMarketplaceEnquiryStatus(enquiry) === "pending";
+}
+
+export function marketplaceEnquiryCanBeDiscussed(enquiry: MarketplaceEnquiry): boolean {
+  return displayMarketplaceEnquiryStatus(enquiry) === "discussing";
+}
+
+export function marketplaceEnquiryCanConfirmCustomerAgreement(
+  enquiry: MarketplaceEnquiry,
+  messages: MarketplaceEnquiryMessage[]
+): boolean {
+  return (
+    displayMarketplaceEnquiryStatus(enquiry) === "discussing" &&
+    enquiry.customerAgreedAt === null &&
+    messages.some((message) => message.senderRole === "designer")
+  );
+}
+
+export function marketplaceEnquiryCanBeLinked(enquiry: MarketplaceEnquiry): boolean {
+  return (
+    displayMarketplaceEnquiryStatus(enquiry) === "discussing" &&
+    enquiry.customerAgreedAt !== null
+  );
 }

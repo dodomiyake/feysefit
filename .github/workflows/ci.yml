@@ -198,6 +198,13 @@ jobs:
           PGUSER: postgres
           PGDATABASE: feysefit_ci
         run: psql -v ON_ERROR_STOP=1 -f supabase/patch-marketplace-enquiries.sql
+      - name: Apply marketplace enquiry conversations
+        env:
+          PGPASSWORD: postgres
+          PGHOST: localhost
+          PGUSER: postgres
+          PGDATABASE: feysefit_ci
+        run: psql -v ON_ERROR_STOP=1 -f supabase/patch-marketplace-enquiry-conversations.sql
       - name: Assert security audit follow-up 1
         env:
           PGPASSWORD: postgres

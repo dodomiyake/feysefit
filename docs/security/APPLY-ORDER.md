@@ -50,7 +50,8 @@ Then, in a **staging** SQL editor, entire files from line 1:
 4. `supabase/patch-security-audit-followup-2.sql` (account-activity EXECUTE, database cleanup, public-image INSERT revoke). This file **raises** if `app_private` or `consume_rate_limit_server` from follow-up 1 are missing. Quarantine objects are deleted through the Storage API endpoint, never direct SQL.
 5. `supabase/patch-security-audit-followup-3.sql` (authenticated-only helper policies and anonymous marketplace reads).
 6. `supabase/patch-security-audit-followup-4.sql` (routes designer ownership policies through `current_designer_profile_id()` without restoring private `designer_profiles.user_id` access).
-7. `supabase/patch-marketplace-enquiries.sql` (pending enquiry workflow, pair-scoped acceptance/unlinking, and atomic project creation). Deploy the matching application in the same release; the legacy immediate-link RPC is revoked.
+7. `supabase/patch-marketplace-enquiries.sql` (pending enquiry records, pair-scoped linking, and atomic project creation).
+8. `supabase/patch-marketplace-enquiry-conversations.sql` (designer acceptance-for-discussion, participant-only pre-link replies, client agreement confirmation, and explicit designer finalisation). Deploy the matching application in the same release; accepting for discussion or replying cannot create a relationship, and the legacy immediate-link RPC remains revoked.
 
 Limiter for the application is now:
 
@@ -94,7 +95,7 @@ select
 12. `can_read_private_storage_object` is a function: check `EXECUTE`, not `SELECT`.
 13. Enable `pg_cron` in staging if the follow-up 2 notice said it was skipped, then re-apply follow-up 2 so cleanup jobs register.
 
-## Application deploy (step 7)
+## Application deploy (step 8)
 
 Deploy from `security/hardening-pass` only after step 2 created
 `consume_rate_limit_server` and `log_account_activity_server`, and the HMAC / cookie secrets are set. Coordinate `/auth/uploads/promote` with the public-image INSERT revocation.
@@ -102,6 +103,7 @@ Deploy from `security/hardening-pass` only after step 2 created
 ## Rollback order (reverse)
 
 For the enquiry release, stop the matching application deploy first, then run
+`supabase/rollback-marketplace-enquiry-conversations.sql`, followed by
 `supabase/rollback-marketplace-enquiries.sql`. The rollback deliberately does
 not restore browser relationship writes or the legacy immediate-link RPC.
 

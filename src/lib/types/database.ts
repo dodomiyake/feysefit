@@ -212,15 +212,36 @@ export interface Database {
           budget: string | null;
           preferred_deadline: string | null;
           consultation_preference: string | null;
-          status: "pending" | "accepted" | "declined" | "cancelled" | "expired";
+          status:
+            | "pending"
+            | "discussing"
+            | "accepted"
+            | "declined"
+            | "cancelled"
+            | "expired";
           designer_response: string | null;
           project_id: string | null;
           expires_at: string;
           accepted_at: string | null;
+          customer_agreed_at: string | null;
           declined_at: string | null;
           cancelled_at: string | null;
           created_at: string;
           updated_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      marketplace_enquiry_messages: {
+        Row: {
+          id: string;
+          enquiry_id: string;
+          sender_user_id: string;
+          sender_role: "customer" | "designer";
+          sender_name: string;
+          body: string;
+          created_at: string;
         };
         Insert: never;
         Update: never;
@@ -760,6 +781,22 @@ export interface Database {
       };
       respond_to_marketplace_enquiry: {
         Args: { p_enquiry_id: string; p_decision: string; p_response?: string | null };
+        Returns: undefined;
+      };
+      send_marketplace_enquiry_message: {
+        Args: { p_enquiry_id: string; p_body: string };
+        Returns: string;
+      };
+      accept_marketplace_enquiry_for_discussion: {
+        Args: { p_enquiry_id: string; p_body: string };
+        Returns: string;
+      };
+      confirm_marketplace_enquiry_customer_agreement: {
+        Args: { p_enquiry_id: string };
+        Returns: undefined;
+      };
+      confirm_marketplace_enquiry_agreement: {
+        Args: { p_enquiry_id: string };
         Returns: undefined;
       };
       cancel_marketplace_enquiry: {
