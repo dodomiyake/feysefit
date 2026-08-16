@@ -148,6 +148,8 @@ create table if not exists public.designer_profiles (
   appointment_slot_minutes integer,
   offered_meeting_modes text[],
   service_areas text[],
+  phone text,
+  admin_notes text,
   marketplace_live boolean default false,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
