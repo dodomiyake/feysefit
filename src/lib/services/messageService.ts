@@ -12,14 +12,16 @@ import { buildMessageNotifications, type AppNotification } from "@/lib/notificat
 import { formatTimestamp } from "@/lib/services/authService";
 import {
   getCustomerById,
-  getCustomerLinkState,
   listCustomersForDesigner,
   resolveCustomerProfileId,
 } from "@/lib/services/customerService";
-import { getDesignerById, listDesigners, resolveDesignerProfileId } from "@/lib/services/designerService";
-import { createProject, listProjects } from "@/lib/services/projectService";
+import {
+  PUBLIC_DESIGNER_PROFILE_SELECT,
+  resolveDesignerProfileId,
+} from "@/lib/services/designerService";
+import { listProjects } from "@/lib/services/projectService";
 import { isConversationReadOnly } from "@/lib/unlink-guards";
-import type { Customer, Designer } from "@/lib/mock-data";
+import type { Designer } from "@/lib/mock-data";
 
 type MessageAuthUser = {
   id: string;
@@ -34,42 +36,6 @@ function resolveAvatarUrl(value?: string | null): string | undefined {
   return trimmed || undefined;
 }
 
-function buildClientConversation(customer: Customer): Conversation {
-  const avatar = resolveAvatarUrl(customer.profileImage);
-  return {
-    id: `client-${customer.id}`,
-    title: customer.name,
-    preview: "Start a conversation with your client",
-    timestamp: "New",
-    tag: "Client",
-    online: true,
-    contactName: customer.name,
-    contactRole: "customer",
-    avatar,
-    contactAvatar: avatar ?? "",
-    dateLabel: "Today",
-    messages: [],
-  };
-}
-
-function buildLinkedDesignerConversation(designer: Designer): Conversation {
-  const avatar = resolveAvatarUrl(designer.profileImage);
-  return {
-    id: `designer-${designer.id}`,
-    title: designer.designerName,
-    preview: "Message your designer",
-    timestamp: "New",
-    tag: "Linked",
-    online: true,
-    contactName: designer.designerName,
-    contactRole: "designer",
-    avatar,
-    contactAvatar: avatar ?? "",
-    dateLabel: "Today",
-    messages: [],
-  };
-}
-
 function sortConversations(conversations: Conversation[]) {
   return [...conversations].sort((a, b) => {
     const aHasMessages = a.messages.length > 0;
@@ -79,7 +45,7 @@ function sortConversations(conversations: Conversation[]) {
   });
 }
 
-async function findOrCreateMessagingProject(input: {
+async function findMessagingProject(input: {
   designerLegacyId: string;
   customerLegacyId: string;
   customerName: string;
@@ -107,33 +73,9 @@ async function findOrCreateMessagingProject(input: {
     };
   }
 
-  const link = await getCustomerLinkState(input.customerLegacyId);
-  if (!link.linkedDesignerId || link.linkedDesignerId !== input.designerLegacyId) {
-    throw new Error("You can only message your linked designer while the relationship is active.");
-  }
-
-  const project = await createProject({
-    title: `${input.customerName} — Messages`,
-    customerId: input.customerLegacyId,
-    customerName: input.customerName,
-    outfitType: "General",
-    deadline: "TBD",
-    budget: "TBD",
-    designerProfileId,
-    customerUpdate: "Say hello to start your bespoke journey.",
-  });
-
-  const { data: row } = await supabase
-    .from("projects")
-    .select("id, legacy_id")
-    .or(legacyOrIdFilter(project.id))
-    .maybeSingle();
-  if (!row) throw new Error("Project not found after creation");
-
-  return {
-    projectUuid: row.id,
-    projectLegacyId: row.legacy_id ?? row.id,
-  };
+  throw new Error(
+    "Your enquiry must be accepted and the designer must create the project before messaging opens."
+  );
 }
 
 async function resolveProjectForConversation(
@@ -158,7 +100,7 @@ async function resolveProjectForConversation(
     const customers = await listCustomersForDesigner(authUser.designerId);
     const customer = customers.find((c) => c.id === customerLegacyId);
     if (!customer) throw new Error("Client not found");
-    return findOrCreateMessagingProject({
+    return findMessagingProject({
       designerLegacyId: authUser.designerId,
       customerLegacyId,
       customerName: customer.name,
@@ -168,7 +110,7 @@ async function resolveProjectForConversation(
   if (conversationId.startsWith("designer-")) {
     const designerLegacyId = conversationId.replace(/^designer-/, "");
     if (!authUser?.customerId) throw new Error("Customer account required");
-    return findOrCreateMessagingProject({
+    return findMessagingProject({
       designerLegacyId,
       customerLegacyId: authUser.customerId,
       customerName: authUser.name,
@@ -186,7 +128,6 @@ export async function listConversations(
   const projects = await listProjects();
   const supabase = createClient();
   const conversations: Conversation[] = [];
-  const coveredCustomerIds = new Set<string>();
   const viewerRole = authUser.role === "designer" ? "designer" : "customer";
 
   const customerAvatarById = new Map<string, string>();
@@ -220,7 +161,7 @@ export async function listConversations(
     if (row.designer_id) {
       const { data: designerRow } = await supabase
         .from("designer_profiles")
-        .select("*")
+        .select(PUBLIC_DESIGNER_PROFILE_SELECT)
         .eq("id", row.designer_id)
         .maybeSingle();
       if (designerRow) {
@@ -246,10 +187,6 @@ export async function listConversations(
       }
     }
 
-    if (project.customerId) {
-      coveredCustomerIds.add(project.customerId);
-    }
-
     const designerAvatar = resolveAvatarUrl(designer.profileImage);
 
     conversations.push(
@@ -264,32 +201,16 @@ export async function listConversations(
     );
   }
 
-  if (authUser.role === "designer" && authUser.designerId) {
-    const customers = await listCustomersForDesigner(authUser.designerId);
-    for (const customer of customers) {
-      if (coveredCustomerIds.has(customer.id)) continue;
-      conversations.push(buildClientConversation(customer));
-    }
-  }
-
-  if (authUser.role === "customer" && authUser.customerId && conversations.length === 0) {
-    const link = await getCustomerLinkState(authUser.customerId);
-    if (link.linkedDesignerId) {
-      const designer = await getDesignerById(link.linkedDesignerId);
-      if (designer) {
-        conversations.push(buildLinkedDesignerConversation(designer));
-      }
-    }
-  }
+  // Accepted relationships without projects deliberately do not appear as
+  // message threads. The designer creates the project from the enquiry first.
 
   if (authUser.role === "customer" && authUser.customerId) {
-    const link = await getCustomerLinkState(authUser.customerId);
     return sortConversations(
       conversations.map((conversation) => {
         const project = projects.find((p) => `project-${p.id}` === conversation.id);
         const readOnly = isConversationReadOnly({
           relationshipArchivedAt: project?.relationshipArchivedAt,
-          linkedDesignerId: link.linkedDesignerId,
+          linkedDesignerId: project?.relationshipArchivedAt ? null : "active",
         });
         if (!readOnly) return conversation;
         return {
@@ -348,10 +269,17 @@ export async function sendProjectMessage(input: {
   }
 
   if (input.authUser?.customerId) {
-    const link = await getCustomerLinkState(input.authUser.customerId);
-    if (!link.linkedDesignerId) {
-      throw new Error("Link with your designer again before sending new messages.");
-    }
+    const customerProfileId = await resolveCustomerProfileId(input.authUser.customerId);
+    const { data: relationship } = customerProfileId
+      ? await supabase
+          .from("designer_customer_relationships")
+          .select("id")
+          .eq("customer_id", customerProfileId)
+          .eq("designer_id", projectRow?.designer_id ?? "")
+          .eq("is_active", true)
+          .maybeSingle()
+      : { data: null };
+    if (!relationship) throw new Error("This designer relationship is not active.");
   }
 
   const { data, error } = await supabase
@@ -383,36 +311,4 @@ export async function listMessageNotifications(
   const conversations = await listConversations(authUser);
   const viewerRole = authUser.role === "designer" ? "designer" : "customer";
   return buildMessageNotifications(conversations, viewerRole);
-}
-
-export async function getOrCreateDesignerConversation(
-  designerLegacyId: string,
-  customerName: string
-): Promise<Conversation> {
-  const designers = await listDesigners();
-  const designer = designers.find((d) => d.id === designerLegacyId);
-  if (!designer) throw new Error("Designer not found");
-
-  return {
-    id: `designer-${designer.id}`,
-    title: designer.designerName,
-    preview: "New marketplace enquiry",
-    timestamp: "Just now",
-    avatar: resolveAvatarUrl(designer.profileImage),
-    tag: "Marketplace",
-    online: true,
-    contactName: designer.designerName,
-    contactRole: "designer",
-    contactAvatar: resolveAvatarUrl(designer.profileImage) ?? "",
-    dateLabel: "Today",
-    messages: [
-      {
-        id: `mp-${designer.id}`,
-        sender: "customer",
-        senderName: customerName,
-        text: `Hi ${designer.designerName.split(" ")[0]}, I'd like to discuss a custom design request from the marketplace.`,
-        timestamp: "Just now",
-      },
-    ],
-  };
 }

@@ -9,6 +9,7 @@ import {
   Users,
   Calendar,
   MessageSquare,
+  Inbox,
   Store,
   Settings,
 } from "lucide-react";
@@ -20,6 +21,7 @@ const navItems = [
   { href: "/projects", icon: FolderKanban, label: "Projects" },
   { href: "/clients", icon: Users, label: "Clients" },
   { href: "/appointments", icon: Calendar, label: "Appointments" },
+  { href: "/enquiries", icon: Inbox, label: "Enquiries" },
   { href: "/messages", icon: MessageSquare, label: "Messages" },
   { href: "/marketplace", icon: Store, label: "Marketplace" },
   { href: "/settings", icon: Settings, label: "Settings" },

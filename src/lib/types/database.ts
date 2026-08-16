@@ -200,6 +200,32 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["designer_customer_relationships"]["Row"]>;
         Relationships: [];
       };
+      marketplace_enquiries: {
+        Row: {
+          id: string;
+          designer_id: string;
+          customer_id: string;
+          designer_name: string;
+          customer_name: string;
+          outfit_type: string;
+          description: string;
+          budget: string | null;
+          preferred_deadline: string | null;
+          consultation_preference: string | null;
+          status: "pending" | "accepted" | "declined" | "cancelled" | "expired";
+          designer_response: string | null;
+          project_id: string | null;
+          expires_at: string;
+          accepted_at: string | null;
+          declined_at: string | null;
+          cancelled_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       invite_codes: {
         Row: {
           id: string;
@@ -720,6 +746,29 @@ export interface Database {
       link_customer_to_marketplace_designer: {
         Args: { p_designer_id: string };
         Returns: undefined;
+      };
+      create_marketplace_enquiry: {
+        Args: {
+          p_designer_id: string;
+          p_outfit_type: string;
+          p_description: string;
+          p_budget?: string | null;
+          p_preferred_deadline?: string | null;
+          p_consultation_preference?: string | null;
+        };
+        Returns: string;
+      };
+      respond_to_marketplace_enquiry: {
+        Args: { p_enquiry_id: string; p_decision: string; p_response?: string | null };
+        Returns: undefined;
+      };
+      cancel_marketplace_enquiry: {
+        Args: { p_enquiry_id: string };
+        Returns: undefined;
+      };
+      create_project_from_marketplace_enquiry: {
+        Args: { p_enquiry_id: string };
+        Returns: string;
       };
       apply_customer_measurement_submission: {
         Args: {

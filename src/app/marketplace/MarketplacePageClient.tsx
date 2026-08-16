@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Lock, Search, Shield } from "lucide-react";
 import { DesignerMarketplaceCard } from "@/components/ui/DesignerMarketplaceCard";
@@ -85,7 +86,7 @@ export function MarketplacePageClient({ initialQuery }: { initialQuery: string }
   return (
     <MarketplaceAppShell title="Marketplace" backHref={backHref}>
       <div className="mx-auto max-w-6xl px-5 py-6 lg:px-8 lg:py-10">
-        <div className="mb-8 lg:mb-10">
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between lg:mb-10">
           <div className="lg:hidden">
             <h1 className="font-headline text-3xl font-bold text-primary">Marketplace</h1>
             <p className="mt-2 max-w-xl text-sm leading-relaxed text-primary/60">
@@ -103,6 +104,14 @@ export function MarketplacePageClient({ initialQuery }: { initialQuery: string }
               for your next masterpiece.
             </p>
           </div>
+          {(role === "customer" || role === "designer") && (
+            <Link
+              href="/enquiries"
+              className="inline-flex min-h-11 items-center justify-center self-start rounded-full border border-primary/15 px-5 text-sm font-semibold text-primary transition-colors hover:bg-primary hover:text-white sm:self-auto"
+            >
+              {role === "designer" ? "Client enquiries" : "My enquiries"}
+            </Link>
+          )}
         </div>
 
         <div className="relative mb-6 lg:hidden">

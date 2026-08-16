@@ -655,6 +655,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       if ((useSupabase || useApi) && authUser?.customerId) {
         void (async () => {
+          if (useSupabase && options?.source === "invite") {
+            // accept_customer_invite is the database trust boundary. Do not
+            // attempt a second browser-side relationship upsert.
+            await refreshAppData(authUser);
+            return;
+          }
           const link = useSupabase
             ? await supabaseServices.patchCustomerLink(authUser.customerId!, nextLink)
             : await api.customers.patchLink(authUser.customerId!, nextLink);
@@ -670,7 +676,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           options?.source === "invite" ? "invited" : prev.registrationType ?? "direct",
       }));
     },
-    [useApi, useSupabase, authUser?.customerId, appDesigners, customerLink.hasConcludedProject, customerLink.registrationType]
+    [useApi, useSupabase, authUser, appDesigners, customerLink.hasConcludedProject, refreshAppData]
   );
 
   const initDirectCustomer = useCallback(() => {

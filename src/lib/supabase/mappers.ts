@@ -289,7 +289,7 @@ export function mapUnlinkRequest(row: DbUnlinkRequest): UnlinkRequest {
 
 export function mapCustomerLink(
   customer: DbCustomerProfile,
-  designer?: DbDesignerProfile | null
+  designer?: Pick<DbDesignerProfile, "id" | "legacy_id" | "designer_name"> | null
 ): CustomerLinkState {
   return {
     linkedDesignerId: designer ? profileId(designer) : null,

@@ -45,14 +45,10 @@ export function isLinkedCustomer(state: CustomerLinkState): boolean {
 }
 
 export function canCustomerAccessMarketplace(state: CustomerLinkState): boolean {
-  // An active private designer link always blocks marketplace browsing.
-  if (state.linkedDesignerId) return false;
-  // Unlink approved and designer cleared — marketplace opens.
-  if (state.unlinkStatus === "approved") return true;
-  // Never linked (or direct signup still browsing) — marketplace open.
-  if (!isLinkedCustomer(state)) return true;
-  // Invited / linked registration without an active designer id yet.
-  return false;
+  // Relationships are per designer and projects are isolated per pair. Existing
+  // work with one atelier must never prevent a client from browsing another.
+  void state;
+  return true;
 }
 
 export function getCustomerAccountLabel(state: CustomerLinkState): string {
@@ -87,7 +83,7 @@ export function getMarketplaceBlockReason(state: CustomerLinkState): string {
   if (state.unlinkStatus === "declined") {
     return "Your unlink request was declined. You remain linked to your designer and cannot browse the marketplace.";
   }
-  return "You're linked to your designer privately. Marketplace access opens only after admin approves an unlink request.";
+  return "You can continue browsing designers while your existing projects remain private.";
 }
 
 export const initialCustomerLinkState: CustomerLinkState = {

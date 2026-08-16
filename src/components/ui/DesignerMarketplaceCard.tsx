@@ -16,7 +16,8 @@ export function DesignerMarketplaceCard({ designer }: { designer: Designer }) {
   const { role } = useApp();
   const showCustomerCTAs = shouldShowCustomerMarketplaceCTAs(role);
   const profileHref = `/marketplace/${designer.id}`;
-  const requestHref = `/marketplace/${designer.id}/request`;
+  const requestPath = `/marketplace/${designer.id}/request`;
+  const requestHref = role ? requestPath : `/login?next=${encodeURIComponent(requestPath)}`;
   const meta = getDesignerMarketplaceMeta(designer.id);
   const locationLine = formatDesignerLocationLine(designer);
 
@@ -71,7 +72,7 @@ export function DesignerMarketplaceCard({ designer }: { designer: Designer }) {
           <div className="flex flex-col gap-2 sm:flex-row">
             <Link href={requestHref} className="flex-1 lg:order-2">
               <Button size="sm" className="w-full">
-                Request Design
+                Make an Enquiry
               </Button>
             </Link>
             <Link href={profileHref} className="flex-1 lg:order-1">

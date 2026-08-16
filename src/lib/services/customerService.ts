@@ -4,7 +4,10 @@ import { mapCustomer, mapCustomerLink } from "@/lib/supabase/mappers";
 import type { CustomerLinkState } from "@/lib/customer-access";
 import type { Customer } from "@/lib/mock-data";
 import type { DbCustomerProfile } from "@/lib/types/database";
-import { resolveDesignerProfileId } from "@/lib/services/designerService";
+import {
+  PUBLIC_DESIGNER_PROFILE_SELECT,
+  resolveDesignerProfileId,
+} from "@/lib/services/designerService";
 
 async function fetchCustomerProjectCounts(): Promise<Map<string, number>> {
   const supabase = createClient();
@@ -104,7 +107,7 @@ export async function getCustomerLinkState(customerProfileId: string): Promise<C
   if (relationship?.designer_id) {
     const { data } = await supabase
       .from("designer_profiles")
-      .select("*")
+      .select(PUBLIC_DESIGNER_PROFILE_SELECT)
       .eq("id", relationship.designer_id)
       .maybeSingle();
     designer = data;
@@ -200,20 +203,6 @@ export async function patchCustomerLink(
       const designerId = await resolveDesignerProfileId(patch.linkedDesignerId);
       if (!designerId) throw new Error("Designer not found");
 
-      // One active designer at a time.
-      const { error: deactivateOthersError } = await supabase.rpc(
-        "deactivate_customer_relationships",
-        { p_customer_id: customer.id }
-      );
-      if (deactivateOthersError) {
-        const { error: relationshipError } = await supabase
-          .from("designer_customer_relationships")
-          .update({ is_active: false })
-          .eq("customer_id", customer.id)
-          .eq("is_active", true);
-        if (relationshipError) throw new Error(relationshipError.message);
-      }
-
       const { error: relationshipError } = await supabase.from("designer_customer_relationships").upsert(
         {
           designer_id: designerId,
@@ -239,6 +228,23 @@ export async function patchCustomerLink(
     throw new Error("Could not link to this designer. Try again or pick another artisan.");
   }
   return next;
+}
+
+export async function listActiveDesignerIdsForCustomer(
+  customerLegacyId: string
+): Promise<string[]> {
+  const supabase = createClient();
+  const customerId = await resolveCustomerProfileId(customerLegacyId);
+  if (!customerId) return [];
+
+  const { data, error } = await supabase
+    .from("designer_customer_relationships")
+    .select("designer_id")
+    .eq("customer_id", customerId)
+    .eq("is_active", true)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => row.designer_id);
 }
 
 export async function updateCustomerProfile(

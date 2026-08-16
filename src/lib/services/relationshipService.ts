@@ -230,24 +230,9 @@ export async function updateUnlinkRequest(
       if (/active project|Cannot approve unlink/i.test(approveError.message)) {
         throw new Error(approveError.message);
       }
-      // Fallback for environments that have not run the SQL patch yet.
-      const currentLink = await import("@/lib/services/customerService").then((m) =>
-        m.getCustomerLinkState(existing.customer_id)
-      );
-      const next = syncCustomerLinkFromRequest(currentLink, syncRequest);
-      await patchCustomerLink(existing.customer_id, next);
-      // Force-clear the relationship even if profile patch partially applied earlier.
-      const { error: deactivateError } = await supabase.rpc("deactivate_customer_relationships", {
-        p_customer_id: existing.customer_id,
-      });
-      if (deactivateError) {
-        const { error: relationshipError } = await supabase
-          .from("designer_customer_relationships")
-          .update({ is_active: false })
-          .eq("customer_id", existing.customer_id)
-          .eq("is_active", true);
-        if (relationshipError) throw new Error(relationshipError.message);
-      }
+      // Fail closed. A browser fallback could deactivate every relationship
+      // instead of only the designer named by this unlink request.
+      throw new Error("Could not approve this unlink safely. Apply the latest database patch first.");
     }
     return mapped;
   }

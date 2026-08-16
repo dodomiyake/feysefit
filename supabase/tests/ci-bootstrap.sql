@@ -240,15 +240,22 @@ alter table public.testimonials enable row level security;
 
 create table if not exists public.projects (
   id uuid primary key default gen_random_uuid(),
-  project_code text,
-  title text,
-  customer_name text,
+  project_code text not null,
+  title text not null,
+  customer_name text not null,
   customer_id uuid,
-  designer_id uuid,
-  outfit_type text,
-  deadline date,
-  budget numeric,
-  status text
+  designer_id uuid not null,
+  outfit_type text not null,
+  deadline text not null,
+  budget text not null,
+  description text not null default '',
+  status text not null default 'Enquiry',
+  customer_update text not null default '',
+  internal_notes text not null default '',
+  started_date text,
+  last_updated text,
+  relationship_archived_at timestamptz,
+  updated_at timestamptz not null default now()
 );
 alter table public.projects enable row level security;
 
@@ -261,7 +268,15 @@ alter table public.messages enable row level security;
 
 create table if not exists public.project_items (
   id uuid primary key default gen_random_uuid(),
-  project_id uuid
+  project_id uuid not null,
+  sort_order integer not null default 0,
+  title text not null,
+  outfit_type text not null default '',
+  description text not null default '',
+  status text not null default 'Enquiry',
+  deadline text not null default '',
+  price text not null default '',
+  internal_notes text not null default ''
 );
 alter table public.project_items enable row level security;
 
@@ -300,8 +315,8 @@ create or replace function public.consume_rate_limit(
   p_window_seconds integer
 ) returns boolean language sql as $$ select true $$;
 
-create or replace function public.project_status_blocks_unlink()
-returns boolean language sql as $$ select false $$;
+create or replace function public.project_status_blocks_unlink(p_status text)
+returns boolean language sql immutable as $$ select false $$;
 
 create or replace function public.touch_testimonial_updated_at()
 returns trigger language plpgsql as $$ begin return new; end $$;
@@ -315,8 +330,12 @@ returns trigger language plpgsql as $$ begin return new; end $$;
 create or replace function public.coarse_device_hint(text)
 returns text language sql as $$ select $1 $$;
 
-create or replace function public.is_messaging_shell_project(uuid)
-returns boolean language sql as $$ select false $$;
+create or replace function public.is_messaging_shell_project(
+  p_title text,
+  p_outfit_type text,
+  p_status text
+)
+returns boolean language sql immutable as $$ select false $$;
 
 create or replace function public.project_is_active_for_customer(uuid)
 returns boolean language sql as $$ select true $$;
