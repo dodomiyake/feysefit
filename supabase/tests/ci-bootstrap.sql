@@ -290,6 +290,23 @@ create table if not exists public.testimonials (
 );
 alter table public.testimonials enable row level security;
 
+do $$ begin
+  create type public.report_status as enum ('open', 'resolved', 'dismissed');
+exception when duplicate_object then null;
+end $$;
+
+create table if not exists public.testimonial_reports (
+  id uuid primary key default gen_random_uuid(),
+  legacy_id text unique,
+  testimonial_id uuid not null references public.testimonials (id) on delete cascade,
+  reporter_id uuid not null references public.users (id) on delete cascade,
+  reason text not null,
+  detail text not null default '',
+  status public.report_status not null default 'open',
+  created_at timestamptz not null default now()
+);
+alter table public.testimonial_reports enable row level security;
+
 create table if not exists public.projects (
   id uuid primary key default gen_random_uuid(),
   project_code text not null,
