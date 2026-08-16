@@ -233,6 +233,16 @@ security definer
 set search_path = pg_catalog, public
 as $$ select false $$;
 
+create or replace function public.designer_authorized_for_project(
+  p_project_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$ select false $$;
+
 do $$ begin
   create type public.invite_status as enum ('pending', 'accepted', 'expired');
 exception when duplicate_object then null;
