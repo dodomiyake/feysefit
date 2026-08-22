@@ -1,9 +1,11 @@
 "use client";
 
-import { Check, Circle, Package, Truck, AlertCircle, Wrench, RotateCcw } from "lucide-react";
+import { useState } from "react";
+import { Check, Circle, Package, Truck, AlertCircle, Wrench, RotateCcw, XCircle } from "lucide-react";
 import type { Project } from "@/lib/mock-data";
 import { ProjectStatusSelect } from "@/components/designer/ProjectStatusSelect";
 import { timelineProjectStatuses, type ProjectStatus } from "@/lib/design-tokens";
+import { useApp } from "@/context/AppContext";
 import {
   getProjectStatusIndex,
 } from "@/lib/project-timeline";
@@ -50,6 +52,8 @@ function stepIcon(status: ProjectStatus, index: number, currentIndex: number) {
 }
 
 export function ProductionTimeline({ project, details, isDesigner }: ProductionTimelineProps) {
+  const { updateProjectStatus } = useApp();
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
   const currentIndex = getProjectStatusIndex(project.status);
   const progress = getTimelineProgress(project.status);
   const latestUpdate = isDesigner
@@ -74,9 +78,31 @@ export function ProductionTimeline({ project, details, isDesigner }: ProductionT
           </p>
         </div>
         {isDesigner && (
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-medium text-ink-muted">Update status</span>
-            <ProjectStatusSelect projectId={project.id} status={project.status} />
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-medium text-ink-muted">Update status</span>
+              <ProjectStatusSelect projectId={project.id} status={project.status} />
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (!confirmingCancel) {
+                  setConfirmingCancel(true);
+                  return;
+                }
+                updateProjectStatus(project.id, "Cancelled");
+              }}
+              onBlur={() => setConfirmingCancel(false)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
+                confirmingCancel
+                  ? "border-red-500 bg-red-500 text-white hover:bg-red-600"
+                  : "border-red-500/25 bg-background text-red-600 hover:bg-red-50"
+              )}
+            >
+              <XCircle className="h-3.5 w-3.5" />
+              {confirmingCancel ? "Confirm cancel" : "Cancel project"}
+            </button>
           </div>
         )}
       </div>
