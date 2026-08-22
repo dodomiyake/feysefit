@@ -25,7 +25,7 @@ import {
   ProjectDescriptionCard,
 } from "@/components/projects/details/ProjectDescriptionCard";
 import { resolveProjectDetails } from "@/lib/project-details";
-import { isProjectCancelled } from "@/lib/project-delivery";
+import { getProjectStatusLabel, isClosedProject } from "@/lib/project-delivery";
 import type { Project } from "@/lib/mock-data";
 
 interface ProjectDetailsContentProps {
@@ -37,7 +37,7 @@ interface ProjectDetailsContentProps {
   backLabel?: string;
 }
 
-function CancelledProjectClearedState({
+function ClosedProjectClearedState({
   project,
   backHref,
   backLabel,
@@ -46,6 +46,8 @@ function CancelledProjectClearedState({
   backHref: string;
   backLabel: string;
 }) {
+  const statusLabel = getProjectStatusLabel(project.status).toLowerCase();
+
   return (
     <div className="mx-auto max-w-4xl px-5 pb-8 pt-6 lg:px-16 lg:pb-10 lg:pt-8">
       <DesktopBackNav href={backHref} label={backLabel} />
@@ -57,7 +59,7 @@ function CancelledProjectClearedState({
           Project cleared
         </p>
         <h1 className="mt-3 font-headline text-2xl font-bold text-primary lg:text-4xl">
-          This project has been cancelled
+          This project is {statusLabel}
         </h1>
         <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-primary/65 lg:text-base">
           {project.title} is no longer an active commission. The production workspace,
@@ -86,9 +88,9 @@ export function ProjectDetailsContent({
   const hasReferences = (project.customerReferences?.length ?? 0) > 0;
   const hasTeam = details.teamMembers.length > 0;
 
-  if (!isAdmin && isProjectCancelled(project.status)) {
+  if (!isAdmin && isClosedProject(project.status)) {
     return (
-      <CancelledProjectClearedState
+      <ClosedProjectClearedState
         project={project}
         backHref={backHref}
         backLabel={backLabel}
