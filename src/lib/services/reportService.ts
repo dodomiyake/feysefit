@@ -1,6 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
 import { legacyOrIdFilter } from "@/lib/legacy-id-lookup";
-import { profileId } from "@/lib/supabase/mappers";
 import type { UserReport } from "@/lib/admin-reports";
 
 type ReportRow = {
@@ -31,24 +30,16 @@ async function resolveAdminProfileHref(reportedUserId: string | null): Promise<s
   if (!reportedUserId) return null;
 
   const supabase = createClient();
-  const [{ data: designer }, { data: customer }] = await Promise.all([
-    supabase
-      .from("designer_profiles")
-      .select("id, legacy_id")
-      .eq("user_id", reportedUserId)
-      .maybeSingle(),
-    supabase
-      .from("customer_profiles")
-      .select("id, legacy_id")
-      .eq("user_id", reportedUserId)
-      .maybeSingle(),
-  ]);
-
-  if (designer) {
-    return `/dashboard/admin/designers/${profileId(designer)}`;
+  const { data, error } = await supabase.rpc("admin_lookup_profiles_by_user_ids", {
+    p_user_ids: [reportedUserId],
+  });
+  if (error) throw new Error(error.message);
+  const row = data?.[0];
+  if (row?.designer_id) {
+    return `/dashboard/admin/designers/${row.designer_legacy_id ?? row.designer_id}`;
   }
-  if (customer) {
-    return `/dashboard/admin/customers/${profileId(customer)}`;
+  if (row?.customer_id) {
+    return `/dashboard/admin/customers/${row.customer_legacy_id ?? row.customer_id}`;
   }
   return null;
 }
@@ -61,19 +52,16 @@ async function batchResolveAdminProfileHrefs(
   if (!uniqueIds.length) return hrefs;
 
   const supabase = createClient();
-  const [{ data: designers }, { data: customers }] = await Promise.all([
-    supabase.from("designer_profiles").select("id, legacy_id, user_id").in("user_id", uniqueIds),
-    supabase.from("customer_profiles").select("id, legacy_id, user_id").in("user_id", uniqueIds),
-  ]);
+  const { data, error } = await supabase.rpc("admin_lookup_profiles_by_user_ids", {
+    p_user_ids: uniqueIds,
+  });
+  if (error) throw new Error(error.message);
 
-  for (const designer of designers ?? []) {
-    if (designer.user_id) {
-      hrefs.set(designer.user_id, `/dashboard/admin/designers/${profileId(designer)}`);
-    }
-  }
-  for (const customer of customers ?? []) {
-    if (customer.user_id && !hrefs.has(customer.user_id)) {
-      hrefs.set(customer.user_id, `/dashboard/admin/customers/${profileId(customer)}`);
+  for (const row of data ?? []) {
+    if (row.designer_id) {
+      hrefs.set(row.user_id, `/dashboard/admin/designers/${row.designer_legacy_id ?? row.designer_id}`);
+    } else if (row.customer_id) {
+      hrefs.set(row.user_id, `/dashboard/admin/customers/${row.customer_legacy_id ?? row.customer_id}`);
     }
   }
 
@@ -118,10 +106,7 @@ export async function dismissReport(reportKey: string) {
   if (!report) throw new Error("Report not found");
 
   const supabase = createClient();
-  const { error } = await supabase
-    .from("reports")
-    .update({ status: "dismissed" })
-    .eq("id", report.id);
+  const { error } = await supabase.from("reports").update({ status: "dismissed" }).eq("id", report.id);
   if (error) throw new Error(error.message);
 }
 
@@ -134,33 +119,35 @@ async function setReportedUserAccountStatus(
   if (!report.reported_user_id) {
     throw new Error("This report is not linked to a user account.");
   }
+  const reportedUserId = report.reported_user_id;
 
   const supabase = createClient();
-  const { error: userError } = await supabase
-    .from("users")
-    .update({ account_status: accountStatus, updated_at: new Date().toISOString() })
-    .eq("id", report.reported_user_id);
-  if (userError) throw new Error(userError.message);
+    const { error: userError } = await supabase
+      .from("users")
+      .update({ account_status: accountStatus, updated_at: new Date().toISOString() })
+      .eq("id", reportedUserId);
+    if (userError) throw new Error(userError.message);
 
-  const { data: designer } = await supabase
-    .from("designer_profiles")
-    .select("id")
-    .eq("user_id", report.reported_user_id)
-    .maybeSingle();
+    const { data: profiles, error: profileError } = await supabase.rpc(
+      "admin_lookup_profiles_by_user_ids",
+      { p_user_ids: [reportedUserId] }
+    );
+    if (profileError) throw new Error(profileError.message);
+    const designerId = profiles?.[0]?.designer_id;
 
-  if (designer) {
-    const { error: designerError } = await supabase
-      .from("designer_profiles")
-      .update({ marketplace_live: false, updated_at: new Date().toISOString() })
-      .eq("id", designer.id);
-    if (designerError) throw new Error(designerError.message);
-  }
+    if (designerId) {
+      const { error: designerError } = await supabase.rpc("admin_set_marketplace_live", {
+        p_designer_id: designerId,
+        p_live: false,
+      });
+      if (designerError) throw new Error(designerError.message);
+    }
 
-  const { error: reportError } = await supabase
-    .from("reports")
-    .update({ status: "resolved" })
-    .eq("id", report.id);
-  if (reportError) throw new Error(reportError.message);
+    const { error: reportError } = await supabase
+      .from("reports")
+      .update({ status: "resolved" })
+      .eq("id", report.id);
+    if (reportError) throw new Error(reportError.message);
 }
 
 export async function suspendReportedUser(reportKey: string) {

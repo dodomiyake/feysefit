@@ -2,11 +2,15 @@ import type { CustomerReference } from "@/lib/customer-references";
 import type { CustomerLinkState, UnlinkRequest } from "@/lib/customer-access";
 import type { CustomerMeasurementProfile } from "@/lib/customer-measurements";
 import type { Conversation, MessageAttachment, ThreadMessage } from "@/lib/conversations";
-import type { ProjectStatus, UserRole } from "@/lib/design-tokens";
+import type { UserRole } from "@/lib/design-tokens";
 import { normalizeProjectStatus } from "@/lib/project-delivery";
 import type { MarketplaceApproval } from "@/lib/marketplace-approvals";
 import type { Customer, Designer, Message, PendingInvite, Project } from "@/lib/mock-data";
 import type { ProjectItem } from "@/lib/project-items";
+import {
+  splitGeneratedDesignerBio,
+  normalizeDesignerServiceAreas,
+} from "@/lib/designer-profile-fields";
 import type {
   DbCustomerProfile,
   DbCustomerReference,
@@ -29,14 +33,53 @@ function resolveAvatarUrl(value?: string | null): string | undefined {
   return trimmed || undefined;
 }
 
-export function mapDesigner(row: DbDesignerProfile, portfolio: string[] = []): Designer {
+/** Public marketplace fields only — never user_id, admin_notes, or phone/contact. */
+export const PUBLIC_DESIGNER_PROFILE_COLUMNS = [
+  "id",
+  "legacy_id",
+  "business_name",
+  "designer_name",
+  "location",
+  "specialty",
+  "bio",
+  "tagline",
+  "rating",
+  "review_count",
+  "cover_image",
+  "profile_image",
+  "created_at",
+  "city",
+  "country",
+  "offers_in_person",
+  "price_range_min",
+  "price_range_max",
+  "years_experience",
+  "appointment_slot_minutes",
+  "offered_meeting_modes",
+  "service_areas",
+] as const;
+
+export type PublicDesignerProfile = Pick<
+  DbDesignerProfile,
+  (typeof PUBLIC_DESIGNER_PROFILE_COLUMNS)[number]
+>;
+
+export function mapDesigner(row: PublicDesignerProfile, portfolio: string[] = []): Designer {
+  const cleaned = splitGeneratedDesignerBio(row.bio);
+  const serviceAreas = normalizeDesignerServiceAreas(
+    row.service_areas?.length ? row.service_areas : cleaned.serviceAreas
+  );
+  const tagline = row.tagline?.trim() || undefined;
+
   return {
     id: profileId(row),
     businessName: row.business_name,
     designerName: row.designer_name,
     location: row.location,
     specialty: row.specialty,
-    bio: row.bio,
+    bio: cleaned.bio,
+    tagline,
+    serviceAreas,
     rating: Number(row.rating),
     reviewCount: row.review_count,
     portfolioImages: portfolio.length ? portfolio : [row.cover_image].filter(Boolean),

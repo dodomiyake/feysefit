@@ -88,6 +88,9 @@ export interface Database {
           years_experience: number | null;
           appointment_slot_minutes: number;
           offered_meeting_modes: string[];
+          phone: string;
+          service_areas: string[];
+          tagline: string;
           created_at: string;
           updated_at: string;
         };
@@ -97,6 +100,19 @@ export interface Database {
           designer_name: string;
         };
         Update: Partial<Database["public"]["Tables"]["designer_profiles"]["Row"]>;
+        Relationships: [];
+      };
+      designer_private_details: {
+        Row: {
+          designer_id: string;
+          phone: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["designer_private_details"]["Row"]> & {
+          designer_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["designer_private_details"]["Row"]>;
         Relationships: [];
       };
       designer_availability_dates: {
@@ -632,6 +648,33 @@ export interface Database {
       };
     };
     Views: {
+      marketplace_designers: {
+        Row: {
+          id: string;
+          legacy_id: string | null;
+          business_name: string;
+          designer_name: string;
+          location: string;
+          specialty: string;
+          bio: string;
+          tagline: string;
+          rating: number;
+          review_count: number;
+          cover_image: string;
+          profile_image: string;
+          city: string;
+          country: string;
+          offers_in_person: boolean;
+          price_range_min: number | null;
+          price_range_max: number | null;
+          years_experience: number | null;
+          appointment_slot_minutes: number;
+          offered_meeting_modes: string[];
+          service_areas: string[];
+          created_at: string;
+        };
+        Relationships: [];
+      };
       marketplace_testimonials: {
         Row: {
           id: string;
@@ -725,7 +768,11 @@ export interface Database {
       };
       lookup_invite_code: {
         Args: { invite_code: string };
-        Returns: Json;
+        Returns: Json | null;
+      };
+      lookup_invite_code_server: {
+        Args: { p_code: string };
+        Returns: Json | null;
       };
       update_customer_fabric_selection: {
         Args: {
@@ -756,9 +803,64 @@ export interface Database {
         };
         Returns: undefined;
       };
+      log_account_activity_server: {
+        Args: {
+          p_event_type: string;
+          p_user_id: string;
+          p_ip?: string | null;
+          p_user_agent?: string | null;
+          p_meta?: Json;
+        };
+        Returns: undefined;
+      };
       mark_password_changed: {
         Args: Record<string, never>;
         Returns: string;
+      };
+      own_designer_profile: {
+        Args: Record<string, never>;
+        Returns: {
+          id: string;
+          legacy_id: string | null;
+        }[];
+      };
+      admin_get_designer_moderation: {
+        Args: { p_designer_id: string };
+        Returns: {
+          user_id: string;
+          admin_notes: string | null;
+          email: string;
+        }[];
+      };
+      admin_set_designer_notes: {
+        Args: { p_designer_id: string; p_notes: string };
+        Returns: undefined;
+      };
+      admin_lookup_profiles_by_user_ids: {
+        Args: { p_user_ids: string[] };
+        Returns: {
+          user_id: string;
+          designer_id: string | null;
+          designer_legacy_id: string | null;
+          customer_id: string | null;
+          customer_legacy_id: string | null;
+        }[];
+      };
+      consume_rate_limit: {
+        Args: { p_bucket: string; p_limit: number; p_window_seconds: number };
+        Returns: boolean;
+      };
+      consume_rate_limit_server: {
+        Args: { p_operation: string; p_bucket: string };
+        Returns: boolean;
+      };
+      admin_set_marketplace_live: {
+        Args: { p_designer_id: string; p_live: boolean };
+        Returns: undefined;
+      };
+      withdraw_own_marketplace_listing: {
+        Args: Record<PropertyKey, never>;
+        Returns: undefined;
       };
     };
     Enums: Record<string, never>;
@@ -768,6 +870,7 @@ export interface Database {
 
 export type DbUser = Database["public"]["Tables"]["users"]["Row"];
 export type DbDesignerProfile = Database["public"]["Tables"]["designer_profiles"]["Row"];
+export type DbDesignerPrivateDetails = Database["public"]["Tables"]["designer_private_details"]["Row"];
 export type DbCustomerProfile = Database["public"]["Tables"]["customer_profiles"]["Row"];
 export type DbProject = Database["public"]["Tables"]["projects"]["Row"];
 export type DbProjectItem = Database["public"]["Tables"]["project_items"]["Row"];

@@ -1,13 +1,80 @@
 import { createClient } from "@/lib/supabase/client";
 import { legacyOrIdFilter } from "@/lib/legacy-id-lookup";
-import { mapDesigner } from "@/lib/supabase/mappers";
+import {
+  mapDesigner,
+  PUBLIC_DESIGNER_PROFILE_COLUMNS,
+  type PublicDesignerProfile,
+} from "@/lib/supabase/mappers";
 import type { Designer } from "@/lib/mock-data";
+import { logDevSupabaseError } from "@/lib/supabase-errors";
+
+type Join<T extends readonly string[], Separator extends string> = T extends readonly [
+  infer First extends string,
+  ...infer Rest extends string[],
+]
+  ? Rest extends []
+    ? First
+    : `${First}${Separator}${Join<Rest, Separator>}`
+  : never;
+
+export const PUBLIC_DESIGNER_PROFILE_SELECT = PUBLIC_DESIGNER_PROFILE_COLUMNS.join(
+  ", "
+) as Join<typeof PUBLIC_DESIGNER_PROFILE_COLUMNS, ", ">;
+
+export const PRIVATE_DESIGNER_PROFILE_COLUMNS = ["user_id", "admin_notes", "phone"] as const;
+
+type PublicMarketplaceClient = Pick<ReturnType<typeof createClient>, "from">;
+
+function attachPublicPortfolioImages(
+  designers: PublicDesignerProfile[],
+  portfolios: Array<{ designer_id: string; url: string }> | null
+): Designer[] {
+  return designers.map((row) => {
+    const images =
+      portfolios?.filter((image) => image.designer_id === row.id).map((image) => image.url) ?? [];
+    return mapDesigner(row, images);
+  });
+}
+
+/**
+ * Anonymous marketplace directory. Uses the public projection, not designer_profiles.
+ * Column lists in the client are not a security boundary — the view omits private fields.
+ */
+export async function listPublicMarketplaceDesigners(
+  client: PublicMarketplaceClient = createClient()
+): Promise<Designer[]> {
+  const { data: designers, error } = await client
+    .from("marketplace_designers")
+    .select(PUBLIC_DESIGNER_PROFILE_SELECT)
+    .order("designer_name");
+  if (error) {
+    logDevSupabaseError("listPublicMarketplaceDesigners.marketplace_designers", error);
+    throw new Error(error.message);
+  }
+
+  const liveDesigners = (designers ?? []) as PublicDesignerProfile[];
+  if (!liveDesigners.length) return [];
+
+  const designerIds = liveDesigners.map((row) => row.id);
+  const { data: portfolios, error: portfolioError } = await client
+    .from("portfolio_images")
+    .select("designer_id, url, sort_order")
+    .eq("is_public", true)
+    .in("designer_id", designerIds)
+    .order("sort_order");
+  if (portfolioError) {
+    logDevSupabaseError("listPublicMarketplaceDesigners.portfolio_images", portfolioError);
+    throw new Error(portfolioError.message);
+  }
+
+  return attachPublicPortfolioImages(liveDesigners, portfolios);
+}
 
 export async function listDesigners(): Promise<Designer[]> {
   const supabase = createClient();
   const { data: designers, error } = await supabase
     .from("designer_profiles")
-    .select("*")
+    .select(PUBLIC_DESIGNER_PROFILE_SELECT)
     .order("designer_name");
   if (error) throw new Error(error.message);
 
@@ -16,7 +83,7 @@ export async function listDesigners(): Promise<Designer[]> {
     .select("designer_id, url, sort_order")
     .order("sort_order");
 
-  return (designers ?? []).map((row) => {
+  return ((designers ?? []) as PublicDesignerProfile[]).map((row) => {
     const images =
       portfolios?.filter((p) => p.designer_id === row.id).map((p) => p.url) ?? [];
     return mapDesigner(row, images);
@@ -26,12 +93,25 @@ export async function listDesigners(): Promise<Designer[]> {
 export async function getDesignerById(designerId: string): Promise<Designer | null> {
   if (!designerId) return null;
   const supabase = createClient();
-  const { data, error } = await supabase
-    .from("designer_profiles")
-    .select("*")
+  const { data: publicRow, error: publicError } = await supabase
+    .from("marketplace_designers")
+    .select(PUBLIC_DESIGNER_PROFILE_SELECT)
     .or(legacyOrIdFilter(designerId))
     .maybeSingle();
-  if (error) throw new Error(error.message);
+  if (publicError) throw new Error(publicError.message);
+
+  let data = publicRow;
+  if (!data) {
+    const { data: sessionData } = await supabase.auth.getUser();
+    if (!sessionData.user) return null;
+    const { data: privileged, error } = await supabase
+      .from("designer_profiles")
+      .select(PUBLIC_DESIGNER_PROFILE_SELECT)
+      .or(legacyOrIdFilter(designerId))
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    data = privileged;
+  }
   if (!data) return null;
 
   const { data: portfolios } = await supabase
@@ -41,43 +121,65 @@ export async function getDesignerById(designerId: string): Promise<Designer | nu
     .order("sort_order");
 
   return mapDesigner(
-    data,
+    data as PublicDesignerProfile,
     (portfolios ?? []).map((item) => item.url)
   );
 }
 
-export async function listLiveMarketplaceDesignerIds(): Promise<string[]> {
+/** Own-profile contact only — never used by the anonymous marketplace query. */
+export async function getOwnDesignerContact(): Promise<string> {
   const supabase = createClient();
-  // A boolean flag alone is not sufficient: only an admin-approved listing may
-  // make a designer discoverable. This also protects deployments that have not
-  // yet applied the database trigger hardening patch.
-  const { data: approvedListings, error: approvalError } = await supabase
-    .from("marketplace_listings")
-    .select("designer_id")
-    .eq("status", "approved");
-  if (approvalError) throw new Error(approvalError.message);
-
-  const approvedDesignerIds = Array.from(
-    new Set((approvedListings ?? []).map((listing) => listing.designer_id))
-  );
-  if (!approvedDesignerIds.length) return [];
+  const { data: sessionData } = await supabase.auth.getUser();
+  if (!sessionData.user) return "";
 
   const { data, error } = await supabase
-    .from("designer_profiles")
-    .select("id, legacy_id")
-    .eq("marketplace_live", true)
-    .in("id", approvedDesignerIds);
+    .from("designer_private_details")
+    .select("phone")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data?.phone?.trim() ?? "";
+}
+
+async function upsertOwnDesignerPhone(designerId: string, phone: string) {
+  const supabase = createClient();
+  const { error } = await supabase.from("designer_private_details").upsert(
+    {
+      designer_id: designerId,
+      phone,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "designer_id" }
+  );
+  if (error) throw new Error(error.message);
+}
+
+export async function listLiveMarketplaceDesignerIds(): Promise<string[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("marketplace_designers")
+    .select("id, legacy_id");
   if (error) throw new Error(error.message);
   return (data ?? []).map((row) => row.legacy_id ?? row.id);
 }
 
 export async function setDesignerMarketplaceLive(designerProfileId: string, live: boolean) {
   const supabase = createClient();
-  const { error } = await supabase
-    .from("designer_profiles")
-    .update({ marketplace_live: live })
-    .eq("id", designerProfileId);
-  if (error) throw new Error(error.message);
+  if (live) {
+    const { error } = await supabase.rpc("admin_set_marketplace_live", {
+      p_designer_id: designerProfileId,
+      p_live: true,
+    });
+    if (error) throw new Error(error.message);
+  } else {
+    const { error: withdrawError } = await supabase.rpc("withdraw_own_marketplace_listing");
+    if (withdrawError) {
+      const { error } = await supabase.rpc("admin_set_marketplace_live", {
+        p_designer_id: designerProfileId,
+        p_live: false,
+      });
+      if (error) throw new Error(error.message);
+    }
+  }
   return listLiveMarketplaceDesignerIds();
 }
 
@@ -99,6 +201,9 @@ export async function updateDesignerProfile(
     location?: string;
     specialty?: string;
     bio?: string;
+    tagline?: string;
+    phone?: string;
+    serviceAreas?: string[];
     coverImage?: string;
     profileImage?: string;
     city?: string;
@@ -122,6 +227,8 @@ export async function updateDesignerProfile(
       ...(patch.location !== undefined ? { location: patch.location } : {}),
       ...(patch.specialty !== undefined ? { specialty: patch.specialty } : {}),
       ...(patch.bio !== undefined ? { bio: patch.bio } : {}),
+      ...(patch.tagline !== undefined ? { tagline: patch.tagline } : {}),
+      ...(patch.serviceAreas !== undefined ? { service_areas: patch.serviceAreas } : {}),
       ...(patch.coverImage !== undefined ? { cover_image: patch.coverImage } : {}),
       ...(patch.profileImage !== undefined ? { profile_image: patch.profileImage } : {}),
       ...(patch.city !== undefined ? { city: patch.city.trim() } : {}),
@@ -136,10 +243,13 @@ export async function updateDesignerProfile(
       updated_at: new Date().toISOString(),
     })
     .eq("id", designerId)
-    .select("*")
+    .select(PUBLIC_DESIGNER_PROFILE_SELECT)
     .single();
   if (error) throw new Error(error.message);
-  return mapDesigner(data);
+  if (patch.phone !== undefined) {
+    await upsertOwnDesignerPhone(designerId, patch.phone);
+  }
+  return mapDesigner(data as PublicDesignerProfile);
 }
 
 export async function replacePortfolioImages(designerLegacyId: string, urls: string[]) {

@@ -90,7 +90,10 @@ export function AppointmentRequestPanel({ designer }: { designer: Designer }) {
 
   useEffect(() => {
     if (!canBook) return;
-    void loadBookingData();
+    const frame = requestAnimationFrame(() => {
+      void loadBookingData();
+    });
+    return () => cancelAnimationFrame(frame);
   }, [canBook, loadBookingData]);
 
   const meetingModes = useMemo(() => {

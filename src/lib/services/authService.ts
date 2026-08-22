@@ -5,9 +5,11 @@ import type { UserRole } from "@/lib/design-tokens";
 import {
   GENERIC_LOGIN_ERROR,
   isPasswordStrongEnough,
+  isRememberSessionEnabled,
+  startAppSession,
   toGenericLoginError,
 } from "@/lib/auth-security";
-import { isTurnstileConfigured } from "@/lib/auth-abuse";
+import { requireCaptchaToken } from "@/lib/security/captcha-policy";
 
 function formatTimestamp() {
   return new Date().toLocaleTimeString("en-GB", {
@@ -26,6 +28,9 @@ export async function signIn(
   password: string,
   options?: { captchaToken?: string | null }
 ) {
+  const captchaBlock = requireCaptchaToken(options?.captchaToken);
+  if (captchaBlock) throw new Error(captchaBlock);
+
   const supabase = createClient();
   const { data, error } = await supabase.auth.signInWithPassword({
     email: email.trim().toLowerCase(),
@@ -95,15 +100,14 @@ export async function signUp(input: {
     throw new Error("Invalid account type.");
   }
   if (!isPasswordStrongEnough(input.password)) {
-    throw new Error("Password must be at least 8 characters and include a symbol.");
+    throw new Error("Password must be at least 12 characters.");
   }
 
   // Turnstile tokens are single-use. Never call Supabase signup without a fresh solved token
   // when CAPTCHA is configured — otherwise accounts can be created while the UI still looks blocked.
   const captchaToken = input.captchaToken?.trim() || "";
-  if (isTurnstileConfigured() && !captchaToken) {
-    throw new Error("Complete the security check to prove you are human, then try again.");
-  }
+  const captchaBlock = requireCaptchaToken(captchaToken);
+  if (captchaBlock) throw new Error(captchaBlock);
 
   const supabase = createClient();
   const origin =
@@ -137,7 +141,7 @@ export async function signUp(input: {
         "An account with this email already exists. Sign in instead, or use a different email."
       );
     }
-    throw new Error(error.message);
+    throw new Error(toGenericLoginError(error.message));
   }
   if (!data.user) throw new Error("Signup failed");
 
@@ -176,18 +180,20 @@ export async function resendSignupConfirmation(
 ) {
   const normalized = email.trim().toLowerCase();
   if (!normalized) throw new Error("Email is required.");
+  const captchaBlock = requireCaptchaToken(options?.captchaToken);
+  if (captchaBlock) throw new Error(captchaBlock);
 
   const supabase = createClient();
   const origin =
     typeof window !== "undefined" ? window.location.origin : resolveAppOrigin();
   const { error } = await supabase.auth.resend({
-    type: "signup",
-    email: normalized,
-    options: {
-      emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent("/verify-email")}`,
-      captchaToken: options?.captchaToken?.trim() || undefined,
-    },
-  });
+      type: "signup",
+      email: normalized,
+      options: {
+        emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent("/verify-email")}`,
+        captchaToken: options?.captchaToken?.trim() || undefined,
+      },
+    });
   // Always present a generic outcome to callers (anti-enumeration).
   if (error) {
     console.error("resendSignupConfirmation:", error.message);
@@ -200,6 +206,8 @@ export async function resetPasswordForEmail(
 ) {
   const normalized = email.trim().toLowerCase();
   if (!normalized) throw new Error("Email is required.");
+  const captchaBlock = requireCaptchaToken(options?.captchaToken);
+  if (captchaBlock) throw new Error(captchaBlock);
 
   const supabase = createClient();
   const origin =
@@ -263,13 +271,20 @@ export async function getCurrentUser(): Promise<
   let customerLegacyId: string | undefined;
 
   if (role === "designer") {
-    const { data: designer } = await supabase
-      .from("designer_profiles")
-      .select("id, legacy_id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    designerProfileId = designer?.id;
-    designerLegacyId = designer?.legacy_id ?? designer?.id;
+    const { data: ownDesigner, error: ownDesignerError } = await supabase.rpc("own_designer_profile");
+    const designer = ownDesignerError ? null : ownDesigner?.[0];
+    if (designer) {
+      designerProfileId = designer.id;
+      designerLegacyId = designer.legacy_id ?? designer.id;
+    } else {
+      const { data: legacyDesigner } = await supabase
+        .from("designer_profiles")
+        .select("id, legacy_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      designerProfileId = legacyDesigner?.id;
+      designerLegacyId = legacyDesigner?.legacy_id ?? legacyDesigner?.id;
+    }
   }
 
   if (role === "customer") {
@@ -329,12 +344,12 @@ export async function updateUserProfile(
 
 export async function updatePassword(newPassword: string) {
   if (!isPasswordStrongEnough(newPassword)) {
-    throw new Error("Password must be at least 8 characters and include a symbol.");
+    throw new Error("Password must be at least 12 characters.");
   }
 
   const supabase = createClient();
   const { error } = await supabase.auth.updateUser({ password: newPassword });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(toGenericLoginError(error.message));
 
   try {
     await supabase.rpc("mark_password_changed");
@@ -344,6 +359,7 @@ export async function updatePassword(newPassword: string) {
 
   // Invalidate other devices / sessions after password change.
   await supabase.auth.signOut({ scope: "others" });
+  await startAppSession(isRememberSessionEnabled());
 }
 
 /** End every refresh session except the current browser. */

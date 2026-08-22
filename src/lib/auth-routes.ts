@@ -22,7 +22,15 @@ const PUBLIC_EXACT = new Set([
   "/auth/security-event",
 ]);
 
-const PUBLIC_PREFIXES = ["/auth/callback", "/join/", "/api/", "/account/", "/signup/"];
+const PUBLIC_PREFIXES = [
+  "/auth/callback",
+  "/join/",
+  "/api/",
+  "/account/",
+  "/signup/",
+  "/_next/",
+  "/__nextjs",
+];
 
 function isMarketplacePublic(pathname: string): boolean {
   if (!pathname.startsWith("/marketplace")) return false;

@@ -23,7 +23,6 @@ export default function JoinInvitePage({ params }: { params: Promise<{ code: str
   );
   const [projectType, setProjectType] = useState<string | null>(useSupabase ? null : "Bespoke");
   const [invalid, setInvalid] = useState(false);
-  const [used, setUsed] = useState(false);
 
   const normalizedCode = normalizeInviteCode(decodeURIComponent(code));
 
@@ -34,10 +33,6 @@ export default function JoinInvitePage({ params }: { params: Promise<{ code: str
       .then((details) => {
         if (!details) {
           setInvalid(true);
-          return;
-        }
-        if (details.status !== "pending") {
-          setUsed(true);
           return;
         }
         setInviteName(details.invite.name);
@@ -82,16 +77,6 @@ export default function JoinInvitePage({ params }: { params: Promise<{ code: str
               <Link href="/account/client" className="inline-block text-sm font-medium text-accent hover:underline">
                 Create an account without an invite
               </Link>
-            </div>
-          ) : used ? (
-            <div className="space-y-4">
-              <h1 className="font-headline text-2xl font-semibold text-primary">Invitation already used</h1>
-              <p className="text-sm leading-relaxed text-ink-muted">
-                This invitation has already been accepted. Sign in if you already have an account.
-              </p>
-              <Button onClick={() => router.push("/login")} className="min-w-[200px]">
-                Sign in
-              </Button>
             </div>
           ) : (
             <div className="space-y-6">

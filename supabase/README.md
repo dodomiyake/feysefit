@@ -7,24 +7,20 @@
 
 ## 2. Apply the database schema
 
-**New Supabase project — run one file only:**
+**New Supabase project:**
 
-1. Open `supabase/schema.sql` in the SQL Editor
-2. Select **all** of it (Ctrl+A) and click **Run**
+`supabase/schema.sql` is the historical base schema; it is not the complete
+current production baseline by itself. Apply the verified empty-project sequence
+in `docs/security/STAGING-BASELINE.md`. That document includes
+`schema.sql`, `storage.sql`, bootstrap reconciliation, the historical feature
+patches, and the security hand-off order.
 
-That creates enums, tables, column patches, auth trigger, and RLS in the correct order.
+Do not copy production users or application rows into staging. Skip
+`supabase/seed.sql` for security verification.
 
-Then run:
-
-2. `supabase/storage.sql` — storage buckets and upload policies
-3. `supabase/seed.sql` — demo data (after creating auth users in step 3 below)
-
-**Do not run `patch-*.sql` on an empty database** — those files assume tables already exist. If you see `relation "…" does not exist`, you skipped `schema.sql` and ran a patch first.
-
-**If you already ran patches on an empty or broken DB:**
-
-1. Run `supabase/patch-bootstrap.sql` (creates tables + enums + missing columns)
-2. Run the **full** `supabase/schema.sql` again from the top
+If a migration reports a missing relation or column, stop. Do not guess the next
+patch or bypass the prerequisite; compare the target against the documented
+baseline and production metadata first.
 
 ## 3. Demo data (optional)
 

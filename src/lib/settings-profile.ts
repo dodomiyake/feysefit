@@ -35,7 +35,7 @@ export function getSettingsProfile(
     return {
       fullName: designer?.designerName ?? authUser?.name ?? "",
       email: authUser?.email ?? "",
-      phone: "",
+      phone: designer?.phone ?? "",
       professionalRole: designer?.specialty ?? "Designer",
       location: designer?.location ?? "",
       avatar: designer?.profileImage ?? "",

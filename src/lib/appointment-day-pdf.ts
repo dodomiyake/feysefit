@@ -25,6 +25,11 @@ export function downloadAppointmentDayPdf(input: {
   doc.text(`Appointments — ${input.dayLabel}`, marginX, cursorY);
   cursorY += 8;
 
+  // PDF path uses jsPDF text() + autoTable string cells only. Do not call doc.html().
+  // jspdf depends on dompurify (GHSA-c2j3-45gr-mqc4, GHSA-55q2-fjhq-7xh7) for HTML
+  // sanitization. Those advisories require custom-element / in-place HTML hooks.
+  // Appointment notes are drawn as text, not HTML. See docs/security/jspdf-dompurify.md.
+
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   doc.setTextColor(85, 85, 85);

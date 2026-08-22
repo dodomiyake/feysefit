@@ -1,7 +1,11 @@
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient, isServiceRoleConfigured } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/types/database";
-import { createHash } from "crypto";
+import { hmacSha256Hex } from "@/lib/security/hmac";
+import { getSecurityEventHmacSecret } from "@/lib/security/secrets";
+import { sanitizeEventMeta } from "@/lib/security/event-meta";
 import { NextResponse, type NextRequest } from "next/server";
+import { clientIpFromHeaders, runSensitiveHttpAction } from "@/lib/security/rate-limit";
+import { redactForLogs } from "@/lib/security/redact";
 
 const ALLOWED_EVENTS = new Set([
   "login_failed",
@@ -18,45 +22,22 @@ const ALLOWED_EVENTS = new Set([
   "auth_rate_limited",
 ]);
 
-/** Very small in-memory throttle per IP for this serverless instance. */
-const ipBuckets = new Map<string, { count: number; resetAt: number }>();
-const IP_LIMIT = 60;
-const IP_WINDOW_MS = 60_000;
-
-function clientIp(request: NextRequest): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0]?.trim() || "unknown";
-  return request.headers.get("x-real-ip")?.trim() || "unknown";
-}
-
-function allowIp(ip: string): boolean {
-  const now = Date.now();
-  const current = ipBuckets.get(ip);
-  if (!current || now > current.resetAt) {
-    ipBuckets.set(ip, { count: 1, resetAt: now + IP_WINDOW_MS });
-    return true;
-  }
-  if (current.count >= IP_LIMIT) return false;
-  current.count += 1;
-  return true;
-}
-
-function hashEmail(email: string | undefined | null): string | null {
+async function hashEmail(email: string | undefined | null): Promise<string | null> {
   const normalized = email?.trim().toLowerCase();
   if (!normalized) return null;
-  const salt = process.env.SECURITY_EVENT_SALT?.trim() || "feysefit";
-  return createHash("sha256").update(`${salt}:${normalized}`).digest("hex");
+  const secret = getSecurityEventHmacSecret();
+  if (!secret) return null;
+  return hmacSha256Hex(secret, `email:${normalized}`);
 }
 
 /**
  * POST /auth/security-event
  * Body: { eventType: string, email?: string, meta?: Record<string, unknown> }
+ * IP is derived server-side. RPC failure does not return success.
  */
 export async function POST(request: NextRequest) {
-  const ip = clientIp(request);
-  if (!allowIp(ip)) {
-    return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
-  }
+  const ip = clientIpFromHeaders(request.headers);
+  const requestId = crypto.randomUUID();
 
   let eventType = "";
   let email: string | undefined;
@@ -69,9 +50,7 @@ export async function POST(request: NextRequest) {
     };
     eventType = typeof body.eventType === "string" ? body.eventType.trim() : "";
     email = typeof body.email === "string" ? body.email : undefined;
-    if (body.meta && typeof body.meta === "object" && !Array.isArray(body.meta)) {
-      meta = body.meta as Json;
-    }
+    meta = sanitizeEventMeta(body.meta);
   } catch {
     return NextResponse.json({ ok: false, error: "invalid_body" }, { status: 400 });
   }
@@ -80,24 +59,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "invalid_event" }, { status: 400 });
   }
 
-  const emailHash = hashEmail(email);
+  const emailHash = await hashEmail(email);
+  if (email && !emailHash) {
+    return NextResponse.json({ ok: false, error: "unavailable", requestId }, { status: 503 });
+  }
+  if (!isServiceRoleConfigured()) {
+    return NextResponse.json({ ok: false, error: "unavailable", requestId }, { status: 503 });
+  }
+
   const userAgent = request.headers.get("user-agent");
 
-  // Structured log always (even if DB patch not applied yet).
-  console.info(
-    JSON.stringify({
-      type: "security_event",
-      eventType,
-      emailHash,
-      ip,
-      meta,
-      at: new Date().toISOString(),
-    })
-  );
-
-  try {
-    const supabase = await createClient();
-    const { error } = await supabase.rpc("log_security_event", {
+  const gated = await runSensitiveHttpAction("securityEvent", ip, async () => {
+    const admin = createServiceClient();
+    const { error } = await admin.rpc("log_security_event", {
       p_event_type: eventType,
       p_email_hash: emailHash,
       p_ip: ip,
@@ -105,15 +79,18 @@ export async function POST(request: NextRequest) {
       p_meta: meta,
     });
     if (error) {
-      // Table/function may not be deployed yet — console log remains source of truth.
-      console.warn("log_security_event rpc:", error.message);
+      console.error(
+        JSON.stringify({
+          type: "security_event_rpc_failed",
+          requestId,
+          message: redactForLogs(error.message),
+        })
+      );
+      throw new Error("log_failed");
     }
-  } catch (error) {
-    console.warn(
-      "log_security_event unavailable:",
-      error instanceof Error ? error.message : error
-    );
-  }
+    return true as const;
+  });
+  if (!gated.ok) return gated.response;
 
   return NextResponse.json({ ok: true });
 }

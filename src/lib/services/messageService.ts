@@ -6,7 +6,7 @@ import {
   mapDesigner,
   mapThreadMessage,
 } from "@/lib/supabase/mappers";
-import type { Conversation, ThreadMessage } from "@/lib/conversations";
+import type { Conversation } from "@/lib/conversations";
 import type { MessageAttachment } from "@/lib/conversations";
 import { buildMessageNotifications, type AppNotification } from "@/lib/notifications";
 import { formatTimestamp } from "@/lib/services/authService";
@@ -355,20 +355,20 @@ export async function sendProjectMessage(input: {
   }
 
   const { data, error } = await supabase
-    .from("messages")
-    .insert({
-      project_id: projectUuid,
-      sender_user_id: input.senderUserId,
-      sender_role: input.senderRole,
-      sender_name: input.senderName,
-      text: trimmedText,
-      timestamp_label: formatTimestamp(),
-      attachments: input.attachments?.length
-        ? (input.attachments as unknown as Json)
-        : null,
-    })
-    .select("*")
-    .single();
+        .from("messages")
+        .insert({
+          project_id: projectUuid,
+          sender_user_id: input.senderUserId,
+          sender_role: input.senderRole,
+          sender_name: input.senderName,
+          text: trimmedText,
+          timestamp_label: formatTimestamp(),
+          attachments: input.attachments?.length
+            ? (input.attachments as unknown as Json)
+            : null,
+        })
+        .select("*")
+        .single();
   if (error) throw new Error(error.message);
   return mapThreadMessage(data);
 }

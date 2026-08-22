@@ -54,8 +54,8 @@ export function MarketplaceFilters({
   const advancedActive = hasActiveAdvancedFilters(location, minRating, priceRange, inPersonOnly);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between gap-4 lg:gap-6">
+    <div className="rounded-2xl border border-primary/10 bg-card/60 p-4 lg:p-5">
+      <div className="flex flex-wrap items-end gap-3 lg:gap-4">
         <div className="min-w-0 flex-1">
           <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary/45 lg:hidden">
             Quick Filters
@@ -85,7 +85,7 @@ export function MarketplaceFilters({
           type="button"
           variant={advancedActive ? "primary" : "zinc"}
           size="sm"
-          className="mt-5 shrink-0 gap-2 px-4 lg:px-5"
+          className="shrink-0 gap-2 px-4 lg:px-5"
           onClick={onToggleAdvanced}
           aria-expanded={showAdvanced}
         >
@@ -100,7 +100,7 @@ export function MarketplaceFilters({
       </div>
 
       {showAdvanced && (
-        <div className="rounded-2xl border border-primary/10 bg-card/40 p-4 lg:p-5">
+        <div className="mt-4 border-t border-primary/10 pt-4">
           <div className="mb-4 flex items-center justify-between gap-3">
             <p className="text-xs font-semibold uppercase tracking-widest text-primary/50">
               Advanced filters

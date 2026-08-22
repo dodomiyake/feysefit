@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "test": "tsx --conditions react-server --test src/lib/services/designerService.test.ts src/lib/designer-profile-fields.test.ts src/lib/marketplace-display.test.ts src/lib/auth-security.test.ts src/lib/security/headers.test.ts src/lib/security/admin-mfa.test.ts src/lib/security/authorization-matrix.test.ts src/lib/security/rate-limit.test.ts src/lib/security/signed-state.test.ts src/lib/security/client-ip.test.ts src/lib/security/safe-outbound-fetch.test.ts src/lib/security/server-only-guard.test.ts src/lib/security/turnstile.test.ts src/lib/security/captcha-policy.test.ts src/lib/security/image-process.test.ts src/lib/security/upload-bytes.test.ts src/lib/security/session-binding.test.ts src/lib/auth-abuse.test.ts src/server/http.test.ts src/server/api-auth.test.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
@@ -25,9 +26,11 @@
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "lucide-react": "^1.22.0",
-    "next": "16.2.9",
+    "next": "16.3.1",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "server-only": "^0.0.1",
+    "sharp": "^0.35.3",
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
@@ -37,7 +40,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.9",
+    "eslint-config-next": "16.3.1",
     "prisma": "^6.19.0",
     "tailwindcss": "^4",
     "tsx": "^4.20.5",
@@ -45,5 +48,10 @@
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
+  },
+  "overrides": {
+    "brace-expansion@1": "1.1.18",
+    "brace-expansion@5": "5.0.9",
+    "js-yaml": "4.3.1"
   }
 }

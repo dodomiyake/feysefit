@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import type { UserRole } from "@/lib/design-tokens";
+import { isRememberSessionEnabled, startAppSession, toGenericMfaError } from "@/lib/auth-security";
 
 export type MfaAssurance = {
   currentLevel: "aal1" | "aal2" | null;
@@ -89,7 +90,7 @@ export async function enrollTotp(friendlyName = "Authenticator app"): Promise<To
     factorType: "totp",
     friendlyName,
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(toGenericMfaError(error.message));
   if (!data.totp?.qr_code || !data.totp.secret) {
     throw new Error("Could not start authenticator setup. Try again.");
   }
@@ -112,20 +113,22 @@ export async function verifyTotpCode(factorId: string, code: string): Promise<vo
   const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({
     factorId,
   });
-  if (challengeError) throw new Error(challengeError.message);
+  if (challengeError) throw new Error(toGenericMfaError(challengeError.message));
 
   const { error: verifyError } = await supabase.auth.mfa.verify({
     factorId,
     challengeId: challenge.id,
     code: trimmed,
   });
-  if (verifyError) throw new Error(verifyError.message || "Invalid authenticator code.");
+  if (verifyError) throw new Error(toGenericMfaError(verifyError.message));
+  await startAppSession(isRememberSessionEnabled());
 }
 
 export async function unenrollTotpFactor(factorId: string): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase.auth.mfa.unenroll({ factorId });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(toGenericMfaError(error.message));
+  await startAppSession(isRememberSessionEnabled());
 }
 
 /**

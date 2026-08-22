@@ -1,36 +1,31 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { getCustomerInitials, resolveCurrentCustomer } from "@/lib/customer-display";
 import { getCustomerAccountLabel } from "@/lib/customer-access";
 import { NotificationButton } from "@/components/ui/NotificationButton";
 
-function CustomerHeaderInner() {
+export function CustomerHeader() {
   const pathname = usePathname();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { authUser, customers, customerLink } = useApp();
   const customer = resolveCurrentCustomer(customers, authUser);
   const displayName = customer?.name ?? authUser?.name ?? "Client";
   const isMarketplace = pathname.startsWith("/marketplace");
-  const searchFromUrl = isMarketplace ? (searchParams.get("q") ?? "") : "";
-  const [searchValue, setSearchValue] = useState(searchFromUrl);
-  const [prevSearchFromUrl, setPrevSearchFromUrl] = useState(searchFromUrl);
-
-  if (searchFromUrl !== prevSearchFromUrl) {
-    setPrevSearchFromUrl(searchFromUrl);
-    setSearchValue(searchFromUrl);
+  const [searchValue, setSearchValue] = useState("");
+  if (!isMarketplace && searchValue !== "") {
+    setSearchValue("");
   }
 
   const handleSearchChange = (value: string) => {
     setSearchValue(value);
     if (!isMarketplace) return;
-    const params = new URLSearchParams(searchParams.toString());
+    const params = new URLSearchParams(window.location.search);
     const trimmed = value.trim();
     if (trimmed) params.set("q", trimmed);
     else params.delete("q");
@@ -83,13 +78,5 @@ function CustomerHeaderInner() {
         </Link>
       </div>
     </header>
-  );
-}
-
-export function CustomerHeader() {
-  return (
-    <Suspense fallback={null}>
-      <CustomerHeaderInner />
-    </Suspense>
   );
 }

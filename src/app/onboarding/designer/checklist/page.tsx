@@ -76,12 +76,11 @@ export default function DesignerSetupChecklistPage() {
   const { authUser, showToast, projects, customers } = useApp();
   const useSupabase = isSupabaseEnabled();
   const [checklist, setChecklist] = useState<DesignerSetupChecklist>({});
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(useSupabase && authUser?.id));
   const [savingKey, setSavingKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (!useSupabase || !authUser?.id) {
-      setLoading(false);
       return;
     }
     let cancelled = false;

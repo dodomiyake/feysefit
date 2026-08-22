@@ -47,11 +47,11 @@ export async function grantAdminAccess(email: string): Promise<AdminTeamMember> 
   }
 
   const { data: updated, error: updateError } = await supabase
-    .from("users")
-    .update({ role: "admin" })
-    .eq("id", user.id)
-    .select("id, email, name, created_at")
-    .single();
+        .from("users")
+        .update({ role: "admin" })
+        .eq("id", user.id)
+        .select("id, email, name, created_at")
+        .single();
   if (updateError) throw new Error(updateError.message);
 
   return {
@@ -87,16 +87,13 @@ export async function revokeAdminAccess(userId: string, actingAdminId: string) {
     throw new Error("This user does not have admin access.");
   }
 
-  const [{ data: hasDesignerProfile }, { data: hasCustomerProfile }] = await Promise.all([
-    supabase.from("designer_profiles").select("id").eq("user_id", userId).maybeSingle(),
-    supabase.from("customer_profiles").select("id").eq("user_id", userId).maybeSingle(),
+  const [{ data: profiles, error: profileLookupError }] = await Promise.all([
+    supabase.rpc("admin_lookup_profiles_by_user_ids", { p_user_ids: [userId] }),
   ]);
+  if (profileLookupError) throw new Error(profileLookupError.message);
+  const match = profiles?.[0];
+  const restoreRole = match?.designer_id ? "designer" : match?.customer_id ? "customer" : "customer";
 
-  const restoreRole = hasDesignerProfile ? "designer" : hasCustomerProfile ? "customer" : "customer";
-
-  const { error: updateError } = await supabase
-    .from("users")
-    .update({ role: restoreRole })
-    .eq("id", userId);
+  const { error: updateError } = await supabase.from("users").update({ role: restoreRole }).eq("id", userId);
   if (updateError) throw new Error(updateError.message);
 }

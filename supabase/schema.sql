@@ -382,6 +382,11 @@ alter table public.designer_profiles
   add column if not exists price_range_min int,
   add column if not exists price_range_max int;
 
+alter table public.designer_profiles
+  add column if not exists phone text not null default '',
+  add column if not exists service_areas text[] not null default '{}'::text[],
+  add column if not exists tagline text not null default '';
+
 alter table public.customer_profiles
   add column if not exists legacy_id text;
 

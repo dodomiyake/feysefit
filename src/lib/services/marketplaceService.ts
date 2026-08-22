@@ -223,15 +223,15 @@ export async function updateMarketplaceListing(
   if (!existing) throw new Error("Listing not found");
 
   const { data, error } = await supabase
-    .from("marketplace_listings")
-    .update({
-      status: patch.status,
-      admin_notes: patch.adminNotes,
-      decline_reason: patch.declineReason,
-    })
-    .eq("id", existing.id)
-    .select("*")
-    .single();
+      .from("marketplace_listings")
+      .update({
+        status: patch.status,
+        admin_notes: patch.adminNotes,
+        decline_reason: patch.declineReason,
+      })
+      .eq("id", existing.id)
+      .select("*")
+      .single();
   if (error) throw new Error(error.message);
 
   if (patch.status === "approved") {

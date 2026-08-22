@@ -6,6 +6,7 @@ export const STORAGE_BUCKETS = {
   customerInspiration: "customer-inspiration",
   measurementGuides: "measurement-guides",
   messageAttachments: "message-attachments",
+  uploadsQuarantine: "uploads-quarantine",
 } as const;
 
 export type StorageBucket = (typeof STORAGE_BUCKETS)[keyof typeof STORAGE_BUCKETS];
@@ -13,7 +14,7 @@ export type StorageBucket = (typeof STORAGE_BUCKETS)[keyof typeof STORAGE_BUCKET
 export const MAX_STORAGE_IMAGE_BYTES = 5 * 1024 * 1024;
 export const MAX_STORAGE_FILE_BYTES = 10 * 1024 * 1024;
 
-export const STORAGE_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
+export const STORAGE_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 
 export const STORAGE_DOCUMENT_TYPES = [
   "application/pdf",

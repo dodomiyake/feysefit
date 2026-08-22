@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [master, main]
+    branches: [master, main, security/**]
   pull_request:
     branches: [master, main]
 
@@ -10,17 +10,22 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   build:
-    name: Lint & build
+    name: Lint, test & build
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
     env:
-      # Placeholder values so Next/Prisma can build without secrets.
-      # Do not use production keys in CI.
       DATABASE_URL: file:./ci.db
       AUTH_SECRET: ci-auth-secret-not-for-production
+      SECURITY_COOKIE_SECRET: ci-security-cookie-secret-not-for-production
+      RATE_LIMIT_HMAC_SECRET: ci-rate-limit-hmac-secret-not-for-production
+      SECURITY_EVENT_HMAC_SECRET: ci-security-event-hmac-secret-not-for-production
+      USE_LEGACY_API: "false"
       NEXT_PUBLIC_USE_SUPABASE: "false"
       NEXT_PUBLIC_USE_API: "false"
       NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
@@ -29,10 +34,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "20"
           cache: npm
@@ -46,5 +51,171 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Unit, authorization and header tests
+        run: npm test
+
       - name: Build
         run: npm run build
+
+  npm-audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Production high/critical audit
+        run: npm audit --omit=dev --audit-level=high
+      - name: Full high/critical audit
+        run: npm audit --audit-level=high
+
+  gitleaks:
+    name: Secret scanning
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Code Scanning is unavailable on this private personal repo, so do not
+    # request security-events: write. Results are the codeql-sarif artifact.
+    # actions: read is required on private repos for CodeQL fingerprinting
+    # (GET workflow run). This is not a pull_request permission.
+    # See docs/security/codeql-ci.md.
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        with:
+          languages: javascript-typescript
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+      - name: Analyze
+        uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        with:
+          output: ${{ runner.temp }}/codeql-sarif
+          upload: never
+          upload-database: false
+          wait-for-processing: false
+      - name: Upload CodeQL SARIF artifact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codeql-sarif
+          path: ${{ runner.temp }}/codeql-sarif/*.sarif
+          if-no-files-found: error
+          retention-days: 30
+      - name: Fail on high or critical CodeQL findings
+        if: ${{ !cancelled() }}
+        run: bash .github/scripts/codeql-sarif-gate.sh "${{ runner.temp }}/codeql-sarif"
+
+  db-security:
+    name: Database security assertions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: feysefit_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d feysefit_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install psql
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Bootstrap disposable database
+        env:
+          PGPASSWORD: postgres
+          PGHOST: localhost
+          PGUSER: postgres
+          PGDATABASE: feysefit_ci
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/ci-bootstrap.sql
+      - name: Apply security audit follow-up 1
+        env:
+          PGPASSWORD: postgres
+          PGHOST: localhost
+          PGUSER: postgres
+          PGDATABASE: feysefit_ci
+        run: psql -v ON_ERROR_STOP=1 -f supabase/patch-security-audit-followup.sql
+      - name: Apply security audit follow-up 2
+        env:
+          PGPASSWORD: postgres
+          PGHOST: localhost
+          PGUSER: postgres
+          PGDATABASE: feysefit_ci
+        run: psql -v ON_ERROR_STOP=1 -f supabase/patch-security-audit-followup-2.sql
+      - name: Apply security audit follow-up 3
+        env:
+          PGPASSWORD: postgres
+          PGHOST: localhost
+          PGUSER: postgres
+          PGDATABASE: feysefit_ci
+        run: psql -v ON_ERROR_STOP=1 -f supabase/patch-security-audit-followup-3.sql
+      - name: Apply security audit follow-up 4
+        env:
+          PGPASSWORD: postgres
+          PGHOST: localhost
+          PGUSER: postgres
+          PGDATABASE: feysefit_ci
+        run: psql -v ON_ERROR_STOP=1 -f supabase/patch-security-audit-followup-4.sql
+      - name: Assert security audit follow-up 1
+        env:
+          PGPASSWORD: postgres
+          PGHOST: localhost
+          PGUSER: postgres
+          PGDATABASE: feysefit_ci
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/security-audit-followup.sql
+      - name: Assert security audit follow-up 2
+        env:
+          PGPASSWORD: postgres
+          PGHOST: localhost
+          PGUSER: postgres
+          PGDATABASE: feysefit_ci
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/security-audit-followup-2.sql
+      - name: Assert security audit follow-up 3
+        env:
+          PGPASSWORD: postgres
+          PGHOST: localhost
+          PGUSER: postgres
+          PGDATABASE: feysefit_ci
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/security-audit-followup-3.sql
+      - name: Assert security audit follow-up 4
+        env:
+          PGPASSWORD: postgres
+          PGHOST: localhost
+          PGUSER: postgres
+          PGDATABASE: feysefit_ci
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/security-audit-followup-4.sql

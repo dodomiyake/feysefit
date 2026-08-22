@@ -11,9 +11,11 @@ import {
   REMEMBER_COOKIE,
   SESSION_STARTED_COOKIE,
 } from "@/lib/auth-security";
+import { issueSessionClockCookieValues } from "@/lib/auth-security-server";
+import { sessionBindingFromAccessToken } from "@/lib/security/session-binding";
 
 /**
- * POST /auth/session/start — seed absolute + idle session clocks after login.
+ * POST /auth/session/start — seed signed absolute + idle session clocks after login.
  */
 export async function POST(request: NextRequest) {
   let remember = false;
@@ -48,19 +50,37 @@ export async function POST(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
 
-  if (!user) {
+  const binding = sessionBindingFromAccessToken({
+    userId: user?.id ?? "",
+    accessToken: session?.access_token,
+  });
+  if (!user || !binding) {
     return NextResponse.json({ ok: false, error: "unauthenticated" }, { status: 401 });
   }
 
-  const now = String(Date.now());
+  const now = Date.now();
+  const clocks = await issueSessionClockCookieValues({
+    binding,
+    remember,
+    startedAtMs: now,
+    lastActivityAtMs: now,
+  });
+  if (!clocks) {
+    return NextResponse.json({ ok: false, error: "unavailable" }, { status: 503 });
+  }
+
   const clockOpts = getSessionClockCookieOptions(remember);
   const rememberOpts = getRememberCookieOptions(remember);
   response.cookies.set(REMEMBER_COOKIE, remember ? "1" : "0", rememberOpts);
-  response.cookies.set(SESSION_STARTED_COOKIE, now, clockOpts);
-  response.cookies.set(LAST_ACTIVITY_COOKIE, now, clockOpts);
-  // Fresh login counts as recent reauthentication for sensitive actions.
-  response.cookies.set(REAUTH_COOKIE, now, getReauthCookieOptions());
+  response.cookies.set(SESSION_STARTED_COOKIE, clocks.started, clockOpts);
+  response.cookies.set(LAST_ACTIVITY_COOKIE, clocks.lastActivity, clockOpts);
+  // Login, password/email/MFA changes rotate clocks and drop prior reauth grants.
+  // A reauth cookie is issued only by POST /auth/reauth after step-up.
+  response.cookies.set(REAUTH_COOKIE, "", { ...getReauthCookieOptions(), maxAge: 0 });
 
   return response;
 }

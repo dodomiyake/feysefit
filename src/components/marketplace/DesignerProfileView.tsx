@@ -19,6 +19,58 @@ interface DesignerProfileViewProps {
   designer: Designer;
 }
 
+function ServiceAreaChips({ areas }: { areas: string[] }) {
+  if (areas.length === 0) return null;
+  return (
+    <div className="mt-4 max-w-full">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-primary/50">
+        Service areas
+      </p>
+      <div className="mt-2 flex flex-wrap content-start gap-2">
+        {areas.map((area) => (
+          <span
+            key={area}
+            className="max-w-full wrap-break-word rounded-full bg-highlight/15 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-primary"
+          >
+            {area}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ProfileCommissionActions({
+  messageHref,
+  requestHref,
+}: {
+  messageHref: string;
+  requestHref: string;
+}) {
+  return (
+    <div className="flex flex-wrap gap-3">
+      <Link href={messageHref} className="min-w-36 flex-1">
+        <button
+          type="button"
+          className="flex w-full items-center justify-center gap-2 rounded-full border border-primary/15 bg-surface px-6 py-2.5 text-sm font-medium text-primary hover:bg-surface-container"
+        >
+          <Mail className="h-4 w-4" />
+          Message
+        </button>
+      </Link>
+      <Link href={requestHref} className="min-w-36 flex-1">
+        <button
+          type="button"
+          className="flex w-full items-center justify-center gap-2 rounded-full bg-primary px-8 py-2.5 text-sm font-medium text-white shadow-lg shadow-primary/20 hover:opacity-90"
+        >
+          <PenLine className="h-4 w-4" />
+          Request Design
+        </button>
+      </Link>
+    </div>
+  );
+}
+
 function PortfolioBento({ pieces }: { pieces: PortfolioPiece[] }) {
   const large = pieces.find((p) => p.layout === "large") ?? pieces[0];
   const tall = pieces.find((p) => p.layout === "tall") ?? pieces[1];
@@ -110,7 +162,10 @@ export function DesignerProfileView({ designer }: DesignerProfileViewProps) {
   const tags = meta?.specialtyTags ?? [designer.specialty];
   const designsCount = meta?.designsCount ?? designer.reviewCount;
   const yearsExp = resolveDesignerYearsExperience(designer, meta);
-  const philosophy = meta?.philosophyQuote ?? designer.bio;
+  const ethos = designer.tagline?.trim() || meta?.philosophyQuote;
+  const biography = designer.bio?.trim();
+  const philosophy = ethos || biography;
+  const serviceAreas = designer.serviceAreas ?? [];
   const signature = meta?.signature ?? designer.designerName.split(" ").map((n) => n[0]).join(". ");
   const portfolio: PortfolioPiece[] =
     meta?.portfolio ??
@@ -121,9 +176,9 @@ export function DesignerProfileView({ designer }: DesignerProfileViewProps) {
     }));
 
   return (
-    <div className="pb-28 lg:pb-28">
+    <div className={cn("pb-8 lg:pb-10", showCustomerCTAs && "pb-32 lg:pb-10")}>
       {/* Hero — full bleed, Stitch-style back control on mobile */}
-      <section className="relative h-[280px] w-full lg:h-[450px]">
+      <section className="relative h-60 w-full lg:h-88">
         <Image src={designer.coverImage} alt="" fill className="object-cover" priority />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-black/10 to-black/20" />
         <BackButton
@@ -147,7 +202,13 @@ export function DesignerProfileView({ designer }: DesignerProfileViewProps) {
 
         <div className="mt-8">
           <h2 className="font-headline text-lg font-semibold text-primary">Philosophy of Fit</h2>
-          <p className="mt-3 text-sm leading-relaxed text-primary/70">{philosophy}</p>
+          {philosophy && (
+            <p className="mt-3 text-sm leading-relaxed text-primary/70">{philosophy}</p>
+          )}
+          {ethos && biography && ethos !== biography && (
+            <p className="mt-3 text-sm leading-relaxed text-primary/70">{biography}</p>
+          )}
+          <ServiceAreaChips areas={serviceAreas} />
         </div>
 
         {showCustomerCTAs && isLinkedDesigner && customerLink.linkedDesignerName && (
@@ -161,10 +222,10 @@ export function DesignerProfileView({ designer }: DesignerProfileViewProps) {
       </section>
 
       {/* Desktop overlay card — Stitch desktop pattern */}
-      <section className="relative z-10 mx-auto hidden max-w-7xl px-5 lg:block lg:-mt-32 lg:px-16">
-        <div className="rounded-xl border border-primary/10 bg-surface-container p-8 shadow-warm lg:grid lg:grid-cols-12 lg:gap-10">
-          <div className="flex flex-col items-start text-left lg:col-span-4">
-            <div className="-mt-24 mb-6 h-32 w-32 overflow-hidden rounded-full border-4 border-background bg-background p-1 shadow-lg">
+      <section className="relative z-10 mx-auto hidden max-w-6xl px-5 lg:block lg:-mt-14 lg:px-8">
+        <div className="rounded-xl border border-primary/10 bg-surface-container p-6 shadow-warm lg:grid lg:grid-cols-[20rem_minmax(0,1fr)] lg:items-start lg:gap-8 lg:p-6">
+          <div className="flex flex-col items-start text-left">
+            <div className="-mt-12 mb-4 h-24 w-24 overflow-hidden rounded-full border-4 border-background bg-background p-1 shadow-lg">
               <div className="relative h-full w-full overflow-hidden rounded-full">
                 <Image src={designer.profileImage} alt={designer.designerName} fill className="object-cover" />
               </div>
@@ -176,29 +237,29 @@ export function DesignerProfileView({ designer }: DesignerProfileViewProps) {
               {designer.location}
             </p>
 
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-3 flex max-w-full flex-wrap gap-2">
               {tags.map((tag) => (
                 <span
                   key={tag}
-                  className="rounded-full bg-highlight/15 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-primary"
+                  className="max-w-full wrap-break-word rounded-full bg-highlight/15 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-primary"
                 >
                   {tag}
                 </span>
               ))}
             </div>
 
-            <p className="mt-4 font-headline text-lg font-semibold text-primary">{designer.businessName}</p>
+            <p className="mt-3 font-headline text-lg font-semibold text-primary">{designer.businessName}</p>
 
-            <div className="mt-6 flex w-full items-center border-y border-primary/10 py-2">
-              <div className="flex-1 border-r border-primary/10 py-2 text-center">
+            <div className="mt-4 flex w-full items-center border-y border-primary/10 py-1.5">
+              <div className="flex-1 border-r border-primary/10 py-1.5 text-center">
                 <p className="font-headline text-xl font-semibold text-primary">{designsCount}</p>
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-primary/50">Designs</p>
               </div>
-              <div className="flex-1 border-r border-primary/10 py-2 text-center">
+              <div className="flex-1 border-r border-primary/10 py-1.5 text-center">
                 <p className="font-headline text-xl font-semibold text-primary">{designer.rating}</p>
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-primary/50">Rating</p>
               </div>
-              <div className="flex-1 py-2 text-center">
+              <div className="flex-1 py-1.5 text-center">
                 <p className="font-headline text-xl font-semibold text-primary">
                   {yearsExp ?? "—"}
                 </p>
@@ -207,18 +268,32 @@ export function DesignerProfileView({ designer }: DesignerProfileViewProps) {
             </div>
           </div>
 
-          <div className="flex flex-col justify-center lg:col-span-8">
+          <div className="flex min-w-0 flex-col">
             <h2 className="border-b border-primary/10 pb-2 font-headline text-xl font-semibold text-primary">
               Philosophy of Fit
             </h2>
-            <p className="mt-4 text-lg leading-relaxed italic text-primary/70">&ldquo;{philosophy}&rdquo;</p>
-            <div className="mt-6 flex items-center gap-4">
+            {philosophy && (
+              <p className="mt-3 text-base leading-relaxed italic text-primary/70">
+                &ldquo;{philosophy}&rdquo;
+              </p>
+            )}
+            {ethos && biography && ethos !== biography && (
+              <p className="mt-3 text-sm leading-relaxed text-primary/70">{biography}</p>
+            )}
+            <ServiceAreaChips areas={serviceAreas} />
+            <div className="mt-4 flex items-center gap-4">
               <div className="h-px flex-1 bg-primary/15" />
               <span className="font-headline text-sm italic text-primary/45">{signature}</span>
             </div>
 
+            {showCustomerCTAs && (
+              <div className="mt-5">
+                <ProfileCommissionActions messageHref={messageHref} requestHref={requestHref} />
+              </div>
+            )}
+
             {showCustomerCTAs && isLinkedDesigner && customerLink.linkedDesignerName && (
-              <p className="mt-6 rounded-lg border border-accent/20 bg-highlight/10 px-4 py-3 text-sm text-primary">
+              <p className="mt-5 rounded-lg border border-accent/20 bg-highlight/10 px-4 py-3 text-sm text-primary">
                 You are privately linked to {customerLink.linkedDesignerName}.{" "}
                 <Link href={messageHref} className="font-medium text-accent hover:underline">
                   Open your project chat
@@ -227,7 +302,7 @@ export function DesignerProfileView({ designer }: DesignerProfileViewProps) {
             )}
 
             {showCustomerCTAs && (
-              <div className="mt-8">
+              <div className="mt-5">
                 <AppointmentRequestPanel designer={designer} />
               </div>
             )}
@@ -236,7 +311,7 @@ export function DesignerProfileView({ designer }: DesignerProfileViewProps) {
       </section>
 
       {/* Portfolio */}
-      <section className="mx-auto mt-10 max-w-7xl px-5 lg:mt-16 lg:px-16">
+      <section className="mx-auto mt-8 max-w-6xl px-5 lg:mt-10 lg:px-8">
         <div className="mb-5 flex items-end justify-between gap-4 lg:mb-6">
           <div>
             <h2 className="font-headline text-xl font-semibold text-primary lg:text-2xl lg:italic">
@@ -266,8 +341,8 @@ export function DesignerProfileView({ designer }: DesignerProfileViewProps) {
       </section>
 
       {/* Testimonials */}
-      <section className="mt-10 border-y border-primary/10 bg-surface-container py-10 lg:mt-16 lg:py-12">
-        <div className="mx-auto max-w-7xl px-5 lg:px-16">
+      <section className="mt-10 border-y border-primary/10 bg-surface-container py-10 lg:mt-12 lg:py-12">
+        <div className="mx-auto max-w-6xl px-5 lg:px-8">
           <div className="mb-8 text-center lg:mb-10">
             <h2 className="font-headline text-xl font-semibold text-primary lg:text-2xl lg:italic">
               <span className="lg:hidden">Client Reviews</span>
@@ -356,9 +431,14 @@ export function DesignerProfileView({ designer }: DesignerProfileViewProps) {
       </section>
 
       {showCustomerCTAs && (
-        <div className="pointer-events-none fixed bottom-20 left-0 right-0 z-40 flex justify-center px-4 lg:bottom-8 lg:left-64 lg:right-8">
-          <div className="pointer-events-auto flex max-w-3xl items-center gap-6 rounded-full border border-primary/10 bg-background/95 px-6 py-3 shadow-warm backdrop-blur-md">
-            <div className="flex items-center -space-x-2">
+        <div
+          className={cn(
+            "pointer-events-none fixed left-0 right-0 z-40 flex justify-center px-4 lg:hidden",
+            role ? "bottom-20" : "bottom-4"
+          )}
+        >
+          <div className="pointer-events-auto flex max-w-3xl items-center gap-4 rounded-full border border-primary/10 bg-background/95 px-5 py-3 shadow-warm backdrop-blur-md">
+            <div className="hidden items-center -space-x-2 sm:flex">
               <div className="relative h-8 w-8 overflow-hidden rounded-full border-2 border-background">
                 <Image src={designer.profileImage} alt="" fill className="object-cover" />
               </div>
@@ -371,28 +451,9 @@ export function DesignerProfileView({ designer }: DesignerProfileViewProps) {
                 +{Math.min(designer.reviewCount, 12)}
               </div>
             </div>
-            <p className="text-sm text-primary/55">Currently available for new commissions</p>
-            <div className="h-6 w-px bg-primary/15" />
-            <div className="flex items-center gap-3">
-              <Link href={messageHref}>
-                <button
-                  type="button"
-                  className="flex items-center justify-center gap-2 rounded-full border border-primary/15 bg-surface px-6 py-2 text-sm font-medium text-primary hover:bg-surface-container"
-                >
-                  <Mail className="h-4 w-4" />
-                  Message
-                </button>
-              </Link>
-              <Link href={requestHref}>
-                <button
-                  type="button"
-                  className="flex items-center justify-center gap-2 rounded-full bg-primary px-8 py-2 text-sm font-medium text-white shadow-lg shadow-primary/20 hover:opacity-90"
-                >
-                  <PenLine className="h-4 w-4" />
-                  Request Design
-                </button>
-              </Link>
-            </div>
+            <p className="hidden text-sm text-primary/55 sm:block">Currently available for new commissions</p>
+            <div className="hidden h-6 w-px bg-primary/15 sm:block" />
+            <ProfileCommissionActions messageHref={messageHref} requestHref={requestHref} />
           </div>
         </div>
       )}

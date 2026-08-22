@@ -34,7 +34,7 @@ export default function ResetPasswordPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isPasswordStrongEnough(password)) {
-      showToast("Password must be at least 8 characters and include a symbol.", "error");
+      showToast("Password must be at least 12 characters.", "error");
       return;
     }
     if (password !== confirm) {
@@ -90,10 +90,10 @@ export default function ResetPasswordPage() {
                 id="password"
                 type={showPassword ? "text" : "password"}
                 required
-                minLength={8}
+                minLength={12}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 8 characters"
+                placeholder="At least 12 characters"
                 className="h-11 w-full rounded-lg border border-zinc-700 bg-zinc-800 py-2.5 pl-12 pr-12 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none focus:border-accent focus:ring-1 focus:ring-accent"
               />
               <button
@@ -116,7 +116,7 @@ export default function ResetPasswordPage() {
                 id="confirm"
                 type={showPassword ? "text" : "password"}
                 required
-                minLength={8}
+                minLength={12}
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
                 placeholder="Repeat password"

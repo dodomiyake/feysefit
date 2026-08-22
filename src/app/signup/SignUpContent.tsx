@@ -66,13 +66,10 @@ export default function SignUpContent({ role }: SignUpContentProps) {
   const submittingRef = useRef(false);
   const useSupabase = isSupabaseEnabled();
   const abuse = useAuthAbuseGuard("signup", email);
-  const lastCaptchaStatus = useRef(abuse.captchaStatus);
-
-  // Clear stale form errors once Turnstile issues a fresh Success token.
-  if (lastCaptchaStatus.current !== abuse.captchaStatus) {
-    const wasSolved = lastCaptchaStatus.current === "solved";
-    lastCaptchaStatus.current = abuse.captchaStatus;
-    if (!wasSolved && abuse.captchaStatus === "solved" && formError) {
+  const [prevCaptchaStatus, setPrevCaptchaStatus] = useState(abuse.captchaStatus);
+  if (prevCaptchaStatus !== abuse.captchaStatus) {
+    setPrevCaptchaStatus(abuse.captchaStatus);
+    if (prevCaptchaStatus !== "solved" && abuse.captchaStatus === "solved" && formError) {
       setFormError(null);
     }
   }
@@ -100,8 +97,8 @@ export default function SignUpContent({ role }: SignUpContentProps) {
       return;
     }
     if (!isPasswordStrongEnough(password)) {
-      setFormError("Password must be at least 8 characters and include a symbol.");
-      showToast("Password must be at least 8 characters and include a symbol.", "error");
+      setFormError("Password must be at least 12 characters.");
+      showToast("Password must be at least 12 characters.", "error");
       return;
     }
     const blocked = abuse.precheck();
@@ -298,7 +295,7 @@ export default function SignUpContent({ role }: SignUpContentProps) {
                     </button>
                   </div>
                   <p className="text-xs text-ink-muted/70">
-                    Minimum 8 characters with at least one symbol.
+                    Minimum 12 characters. Passphrases and password-manager secrets are both fine.
                   </p>
                 </div>
               </div>

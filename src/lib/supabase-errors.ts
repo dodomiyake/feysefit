@@ -27,6 +27,11 @@ const SCHEMA_HINTS: Array<{ match: RegExp; hint: string }> = [
     match: /appointment_slot_minutes|offered_meeting_modes/i,
     hint: "Run supabase/patch-appointment-model.sql in the Supabase SQL Editor.",
   },
+  {
+    match:
+      /designer_profiles\.(tagline|phone|service_areas)|could not find the '(tagline|phone|service_areas)' column|column .*?(tagline|service_areas|designer_profiles\.phone).*does not exist/i,
+    hint: "Run supabase/patch-designer-contact-service-areas.sql in the Supabase SQL Editor.",
+  },
 ];
 
 export function formatSupabaseSchemaError(message: string): string | null {
@@ -46,4 +51,23 @@ export function formatSupabaseSchemaError(message: string): string | null {
 export function toUserFacingSupabaseError(error: unknown, fallback: string): string {
   const message = error instanceof Error ? error.message : fallback;
   return formatSupabaseSchemaError(message) ?? message;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+/** Log PostgREST/Supabase failures with code, details, and hint in development. */
+export function logDevSupabaseError(context: string, error: unknown) {
+  if (process.env.NODE_ENV === "production") return;
+  if (isRecord(error) && ("message" in error || "code" in error)) {
+    console.error(context, {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
+    return;
+  }
+  console.error(context, error);
 }

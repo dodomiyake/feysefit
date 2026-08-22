@@ -62,6 +62,8 @@ function loadTurnstileScript(): Promise<void> {
     script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
     script.async = true;
     script.defer = true;
+    const nonce = document.documentElement.dataset.cspNonce;
+    if (nonce) script.nonce = nonce;
     script.onload = () => resolve();
     script.onerror = () => reject(new Error("Turnstile failed to load"));
     document.head.appendChild(script);
@@ -109,18 +111,22 @@ export function useAuthAbuseGuard(action: AuthAbuseAction, subject: string) {
 
   useEffect(() => {
     if (!showCaptcha || !siteKey) {
-      setCaptchaStatus("idle");
-      setCaptchaToken(null);
-      return;
+      const idle = window.setTimeout(() => {
+        setCaptchaStatus("idle");
+        setCaptchaToken(null);
+      }, 0);
+      return () => window.clearTimeout(idle);
     }
     if (!hostEl) {
-      setCaptchaStatus("loading");
-      return;
+      const loading = window.setTimeout(() => setCaptchaStatus("loading"), 0);
+      return () => window.clearTimeout(loading);
     }
 
     let cancelled = false;
-    setCaptchaStatus("loading");
-    setCaptchaToken(null);
+    const loading = window.setTimeout(() => {
+      setCaptchaStatus("loading");
+      setCaptchaToken(null);
+    }, 0);
 
     const mount = async () => {
       try {
@@ -171,6 +177,7 @@ export function useAuthAbuseGuard(action: AuthAbuseAction, subject: string) {
 
     return () => {
       cancelled = true;
+      window.clearTimeout(loading);
       if (widgetIdRef.current && window.turnstile) {
         try {
           window.turnstile.remove(widgetIdRef.current);

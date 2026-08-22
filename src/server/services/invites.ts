@@ -22,9 +22,9 @@ function mapInvite(row: {
   };
 }
 
-export async function listInvites(designerId = "1") {
+export async function listInvites(designerId?: string) {
   const rows = await prisma.pendingInvite.findMany({
-    where: { designerId },
+    where: designerId ? { designerId } : undefined,
     orderBy: { sentAt: "desc" },
   });
   return rows.map(mapInvite);

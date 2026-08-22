@@ -6,6 +6,7 @@ import {
 } from "@/server/auth";
 import type { AuthUser } from "@/server/services/auth";
 import { jsonData } from "@/server/http";
+import { assertLegacyApiEnabled } from "@/server/api-auth";
 
 function userFromSession(session: NonNullable<Awaited<ReturnType<typeof getSessionFromCookies>>>): AuthUser {
   return {
@@ -19,6 +20,9 @@ function userFromSession(session: NonNullable<Awaited<ReturnType<typeof getSessi
 }
 
 export async function GET() {
+  const disabled = assertLegacyApiEnabled();
+  if (disabled) return disabled;
+
   const session = await getSessionFromCookies();
   if (!session) {
     return jsonData({ user: null });
@@ -28,6 +32,9 @@ export async function GET() {
 }
 
 export async function DELETE() {
+  const disabled = assertLegacyApiEnabled();
+  if (disabled) return disabled;
+
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE, "", { ...sessionCookieOptions(0), maxAge: 0 });
   return jsonData({ ok: true });

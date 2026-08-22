@@ -3,6 +3,7 @@ import { normalizeInviteCode } from "@/lib/invite-link";
 import { resolveAppOrigin, isDeliverableEmail } from "@/lib/email/invite-email";
 import { sendInviteEmail } from "@/lib/email/send-email";
 import { handleApiError, jsonData, jsonError } from "@/server/http";
+import { clientIpFromHeaders, runSensitiveHttpAction } from "@/lib/security/rate-limit";
 
 interface SendInviteEmailBody {
   inviteId?: string;
@@ -51,14 +52,20 @@ export async function POST(request: Request) {
       return jsonError("Invitation not found.", 404);
     }
 
+    const { data: own } = await supabase.rpc("own_designer_profile");
+    const ownId = own?.[0]?.id;
+    if (!ownId || ownId !== invite.designer_id) {
+      return jsonError("You do not have permission to send this invitation.", 403);
+    }
+
     const { data: designer, error: designerError } = await supabase
       .from("designer_profiles")
-      .select("user_id, designer_name, business_name")
+      .select("designer_name, business_name")
       .eq("id", invite.designer_id)
       .maybeSingle();
 
     if (designerError) throw new Error(designerError.message);
-    if (!designer || designer.user_id !== user.id) {
+    if (!designer) {
       return jsonError("You do not have permission to send this invitation.", 403);
     }
 
@@ -66,17 +73,23 @@ export async function POST(request: Request) {
     const inviteUrl = `${origin}/join/${encodeURIComponent(inviteCode)}`;
     const designerName = designer.designer_name || designer.business_name || "Your designer";
 
-    const result = await sendInviteEmail({
-      to: customerEmail,
-      customerName,
-      designerName,
-      projectType,
-      inviteUrl,
-      inviteCode,
-      personalMessage,
-    });
+    const gated = await runSensitiveHttpAction(
+      "inviteEmail",
+      `${clientIpFromHeaders(request.headers)}:${user.id}`,
+      () =>
+        sendInviteEmail({
+          to: customerEmail,
+          customerName,
+          designerName,
+          projectType,
+          inviteUrl,
+          inviteCode,
+          personalMessage,
+        })
+    );
+    if (!gated.ok) return gated.response;
 
-    return jsonData({ sent: true, emailId: result.id });
+    return jsonData({ sent: true, emailId: gated.value.id });
   } catch (error) {
     return handleApiError(error);
   }

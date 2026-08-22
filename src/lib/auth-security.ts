@@ -1,4 +1,9 @@
 /**
+ * Client-safe auth helpers. Signed cookie issue/verify lives in
+ * `auth-security-server.ts` (`import "server-only"`).
+ */
+
+/**
  * FeyseFit Authentication Security MVP
  * - Idle timeout (inactivity) — enforced in middleware + /auth/activity (not client-only)
  * - Absolute session lifetime
@@ -24,12 +29,18 @@ export const REAUTH_COOKIE = "feysefit_reauthenticated_at";
 export const REAUTH_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
 
 export const GENERIC_LOGIN_ERROR = "The email or password you entered is incorrect.";
+export const GENERIC_MFA_ERROR = "That verification code could not be confirmed. Try again.";
+export const GENERIC_AUTH_ERROR = "This request could not be completed. Try again.";
+
+/** NIST-aligned minimum; passphrases and password-manager secrets are both valid. */
+export const MIN_PASSWORD_LENGTH = 12;
+export const MAX_PASSWORD_LENGTH = 256;
 
 const ACTIVITY_TOUCH_THROTTLE_MS = 15_000;
 let lastActivityTouchMs = 0;
 
 export function isPasswordStrongEnough(password: string) {
-  return password.length >= 8 && /[^A-Za-z0-9]/.test(password);
+  return password.length >= MIN_PASSWORD_LENGTH && password.length <= MAX_PASSWORD_LENGTH;
 }
 
 export function getAbsoluteSessionMs(remember: boolean) {
@@ -75,25 +86,7 @@ export function getReauthCookieOptions() {
 
 export type ReauthValidity =
   | { ok: true; reauthenticatedAt: number; expiresAt: number }
-  | { ok: false; reason: "missing" | "expired" };
-
-export function evaluateRecentReauth(input: {
-  reauthRaw: string | undefined;
-  nowMs?: number;
-  maxAgeMs?: number;
-}): ReauthValidity {
-  const now = input.nowMs ?? Date.now();
-  const maxAge = input.maxAgeMs ?? REAUTH_MAX_AGE_MS;
-  const reauthenticatedAt = Number(input.reauthRaw ?? "");
-  if (!Number.isFinite(reauthenticatedAt) || reauthenticatedAt <= 0) {
-    return { ok: false, reason: "missing" };
-  }
-  const expiresAt = reauthenticatedAt + maxAge;
-  if (now > expiresAt) {
-    return { ok: false, reason: "expired" };
-  }
-  return { ok: true, reauthenticatedAt, expiresAt };
-}
+  | { ok: false; reason: "missing" | "expired" | "invalid" };
 
 function cookieSecureFlag() {
   if (typeof window === "undefined") {
@@ -166,34 +159,8 @@ export function clearAppSessionMarkers() {
 }
 
 export type SessionValidity =
-  | { ok: true; remember: boolean }
-  | { ok: false; reason: "idle" | "absolute" };
-
-/** Server/middleware-friendly session clock validation. */
-export function evaluateSessionClocks(input: {
-  nowMs?: number;
-  rememberRaw: string | undefined;
-  startedRaw: string | undefined;
-  lastActivityRaw: string | undefined;
-}): SessionValidity {
-  const now = input.nowMs ?? Date.now();
-  const remember = input.rememberRaw === "1";
-  const started = Number(input.startedRaw ?? "");
-  const lastActivity = Number(input.lastActivityRaw ?? "");
-
-  // Legacy sessions without clocks — allow once; middleware will stamp cookies.
-  if (!Number.isFinite(started) || !Number.isFinite(lastActivity)) {
-    return { ok: true, remember };
-  }
-
-  if (now - lastActivity > IDLE_TIMEOUT_MS) {
-    return { ok: false, reason: "idle" };
-  }
-  if (now - started > getAbsoluteSessionMs(remember)) {
-    return { ok: false, reason: "absolute" };
-  }
-  return { ok: true, remember };
-}
+  | { ok: true; remember: boolean; startedAt: number; lastActivityAt: number }
+  | { ok: false; reason: "idle" | "absolute" | "invalid" };
 
 export function clearSupabaseAuthCookies(
   cookieNames: string[],
@@ -222,22 +189,18 @@ export function isSupabaseAuthCookie(name: string) {
   return name.startsWith("sb-") && (name.includes("auth-token") || name.includes("auth"));
 }
 
-/** Map provider auth errors to a generic login message when appropriate. */
+/** Map provider auth errors to a stable public message. Never return provider text. */
 export function toGenericLoginError(message: string): string {
-  const normalized = message.toLowerCase();
-  if (
-    normalized.includes("invalid login") ||
-    normalized.includes("invalid credentials") ||
-    normalized.includes("email not confirmed") ||
-    normalized.includes("invalid email or password") ||
-    normalized.includes("user not found") ||
-    normalized.includes("wrong password")
-  ) {
-    return GENERIC_LOGIN_ERROR;
-  }
-  // Still hide email-existence leakage for confirmation messaging during login attempts
-  if (normalized.includes("confirm") && normalized.includes("email")) {
-    return GENERIC_LOGIN_ERROR;
-  }
-  return message;
+  void message;
+  return GENERIC_LOGIN_ERROR;
+}
+
+export function toGenericMfaError(message: string): string {
+  void message;
+  return GENERIC_MFA_ERROR;
+}
+
+export function toGenericAuthError(message: string): string {
+  void message;
+  return GENERIC_AUTH_ERROR;
 }

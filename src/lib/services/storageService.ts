@@ -53,10 +53,6 @@ const BLOCKED_EXTENSIONS = new Set([
 const IMAGE_MIME = new Set<string>(STORAGE_IMAGE_TYPES);
 const DOCUMENT_MIME = new Set<string>(STORAGE_DOCUMENT_TYPES);
 
-function sanitizeFileName(name: string) {
-  return name.replace(/[^a-zA-Z0-9._-]/g, "-").toLowerCase();
-}
-
 function getFileExtension(file: File) {
   const fromName = file.name.includes(".") ? file.name.split(".").pop() : null;
   if (fromName && /^[a-z0-9]+$/i.test(fromName)) return fromName.toLowerCase();
@@ -65,7 +61,6 @@ function getFileExtension(file: File) {
     "image/jpeg": "jpg",
     "image/png": "png",
     "image/webp": "webp",
-    "image/gif": "gif",
     "application/pdf": "pdf",
     "application/msword": "doc",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
@@ -74,13 +69,6 @@ function getFileExtension(file: File) {
     "text/plain": "txt",
   };
   return mimeMap[file.type] || "";
-}
-
-function getBaseFileName(name: string) {
-  const sanitized = sanitizeFileName(name);
-  const lastDot = sanitized.lastIndexOf(".");
-  if (lastDot <= 0) return sanitized || "file";
-  return sanitized.slice(0, lastDot) || "file";
 }
 
 function assertNotExecutable(file: File) {
@@ -97,13 +85,6 @@ function assertNotExecutable(file: File) {
   }
 }
 
-const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
-
-/**
- * Detect the real image format from the file's magic bytes. This is stricter and more
- * reliable than file.name or file.type: a renamed PDF fails even if called photo.png,
- * and a genuine PNG passes even when Windows reports a quirky MIME (e.g. image/x-png).
- */
 async function sniffImageMime(file: File): Promise<string | null> {
   let bytes: Uint8Array;
   try {
@@ -121,10 +102,7 @@ async function sniffImageMime(file: File): Promise<string | null> {
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
     return "image/jpeg";
   }
-  // GIF: "GIF8"
-  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) {
-    return "image/gif";
-  }
+  // GIF is not accepted (no safe re-encode path in this pass).
   // WebP: "RIFF" .... "WEBP"
   if (
     bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
@@ -146,7 +124,7 @@ export async function validateImageFile(file: File): Promise<string | null> {
   }
   const detected = await sniffImageMime(file);
   if (!detected) {
-    return `"${file.name}" is not a supported image. Use JPG, PNG, WebP, or GIF.`;
+    return `"${file.name}" is not a supported image. Use JPG, PNG, or WebP.`;
   }
   if (file.size > MAX_STORAGE_IMAGE_BYTES) {
     return `"${file.name}" is larger than 5MB. Compress it and try again.`;
@@ -203,8 +181,7 @@ async function uploadOwnedObject(
   if (!extension) {
     throw new Error("Unsupported or missing file extension.");
   }
-  const baseName = getBaseFileName(file.name);
-  const fileName = `${prefix}-${Date.now()}-${baseName}.${extension}`;
+  const fileName = `${prefix}-${crypto.randomUUID()}.${extension}`;
   const scopeId = await resolveProjectUuidForStorage(projectId);
   const path = buildOwnedObjectPath(ownerId, fileName, scopeId);
 
@@ -212,6 +189,9 @@ async function uploadOwnedObject(
     upsert: false,
     contentType: contentType || file.type || "application/octet-stream",
     cacheControl: "3600",
+    headers: DOCUMENT_MIME.has(contentType || file.type)
+      ? { "Content-Disposition": `attachment; filename="${fileName.replace(/"/g, "")}"` }
+      : undefined,
   });
   if (error) throw new Error(error.message);
 
@@ -248,13 +228,6 @@ export async function resolveStorageAccessUrl(url: string): Promise<string> {
   return data.signedUrl;
 }
 
-const MIME_TO_EXTENSION: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-  "image/gif": "gif",
-};
-
 export async function uploadImage(
   bucket: StorageBucket,
   ownerId: string,
@@ -262,18 +235,29 @@ export async function uploadImage(
   prefix = "image",
   projectId?: string | null
 ): Promise<string> {
-  // Detected content type wins over browser-reported MIME and file name — the storage
-  // bucket rejects non-canonical MIMEs (e.g. image/x-png) even for genuine images.
-  const detectedType = await assertImageFile(file);
-  return uploadOwnedObject(
-    bucket,
-    ownerId,
-    file,
-    prefix,
-    projectId,
-    detectedType,
-    MIME_TO_EXTENSION[detectedType]
-  );
+  await assertImageFile(file);
+  const form = new FormData();
+  form.set("bucket", bucket);
+  form.set("prefix", prefix);
+  form.set("file", file);
+  if (projectId?.trim()) form.set("projectId", projectId.trim());
+
+  const response = await fetch("/auth/uploads/promote", {
+    method: "POST",
+    credentials: "same-origin",
+    body: form,
+  });
+  const body = (await response.json().catch(() => null)) as
+    | { ok?: boolean; url?: string; error?: string }
+    | null;
+  if (!response.ok || !body?.ok || !body.url) {
+    if (body?.error === "too_large") throw new Error("Image is too large.");
+    if (body?.error === "invalid_type") throw new Error("Only JPEG, PNG, or WebP images are allowed.");
+    if (body?.error === "too_many_pixels") throw new Error("Image dimensions are too large.");
+    throw new Error("That image could not be uploaded. Try a smaller JPEG, PNG, or WebP file.");
+  }
+  void ownerId;
+  return body.url;
 }
 
 export async function uploadStorageFile(

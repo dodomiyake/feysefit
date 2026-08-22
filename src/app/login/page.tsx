@@ -66,6 +66,9 @@ function LoginPageContent() {
   const [loginRole, setLoginRole] = useState<"designer" | "customer">(
     roleParam === "customer" ? "customer" : "designer"
   );
+  if (roleParam === "customer" || roleParam === "designer") {
+    if (loginRole !== roleParam) setLoginRole(roleParam);
+  }
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -76,12 +79,6 @@ function LoginPageContent() {
   const allowDemoAuth = isDemoAuthAllowed();
   const nextPath = resolveSafeNextPath(searchParams.get("next"));
   const abuse = useAuthAbuseGuard("login", email);
-
-  useEffect(() => {
-    if (roleParam === "customer" || roleParam === "designer") {
-      setLoginRole(roleParam);
-    }
-  }, [roleParam]);
 
   useEffect(() => {
     const error = searchParams.get("error");
@@ -219,7 +216,7 @@ function LoginPageContent() {
     setSubmitting(true);
     try {
       if (useRemote) {
-        const user = await login(DEMO_CREDENTIALS.customer.email, DEMO_CREDENTIALS.customer.password);
+        await login(DEMO_CREDENTIALS.customer.email, DEMO_CREDENTIALS.customer.password);
         initDirectCustomer();
         showToast("Continuing as direct client");
         router.push("/marketplace");

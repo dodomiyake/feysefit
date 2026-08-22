@@ -1,5 +1,6 @@
 import type { Designer } from "@/lib/mock-data";
 import type { UserRole } from "@/lib/design-tokens";
+import { getDashboardHref } from "@/lib/navigation";
 
 export const marketplaceCategories = [
   "All",
@@ -147,4 +148,31 @@ export function hasActiveAdvancedFilters(
 /** Request design, message designer, and linked-customer prompts are customer-facing only. */
 export function shouldShowCustomerMarketplaceCTAs(role: UserRole | null): boolean {
   return role !== "designer" && role !== "admin";
+}
+
+/** Signed-out visitors return to the public homepage; signed-in users return to their dashboard. */
+export function marketplaceBackHref(role: UserRole | null): string {
+  if (!role) return "/";
+  return getDashboardHref(role);
+}
+
+export type MarketplaceDirectoryState =
+  | "loading"
+  | "error"
+  | "empty-live"
+  | "empty-filters"
+  | "results";
+
+/** Keep the empty-state copy from flashing while public marketplace data is still loading. */
+export function marketplaceDirectoryState(input: {
+  marketplaceReady: boolean;
+  marketplaceError?: boolean;
+  liveCount: number;
+  filteredCount: number;
+}): MarketplaceDirectoryState {
+  if (!input.marketplaceReady) return "loading";
+  if (input.marketplaceError) return "error";
+  if (input.filteredCount > 0) return "results";
+  if (input.liveCount === 0) return "empty-live";
+  return "empty-filters";
 }
