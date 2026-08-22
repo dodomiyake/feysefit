@@ -13,8 +13,7 @@ import {
 } from "@/lib/project-outfit-types";
 import { useApp } from "@/context/AppContext";
 import { isLocalDemoMode, isSupabaseEnabled } from "@/lib/config/backend";
-import { createProjectForDesignerLegacyId } from "@/lib/services/projectService";
-import { DEMO_DESIGNER_ID } from "@/lib/customer-access";
+import { createLinkedCustomerProjectForDesigner } from "@/lib/services/designerProjectCreateService";
 import { createEmptyProjectItemDraft, type ProjectItemInput } from "@/lib/project-items";
 import { ProjectGarmentDraftList } from "@/components/projects/ProjectGarmentDraftList";
 import { cn } from "@/lib/cn";
@@ -69,7 +68,7 @@ export function CreateProjectForm() {
           showToast("Please select a client.", "error");
           return;
         }
-        const project = await createProjectForDesignerLegacyId(authUser.designerId, {
+        const project = await createLinkedCustomerProjectForDesigner(authUser.designerId, {
           title,
           customerId,
           customerName: customer.name,
