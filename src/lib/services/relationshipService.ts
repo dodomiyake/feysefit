@@ -19,7 +19,7 @@ export async function listUnlinkRequests(): Promise<UnlinkRequest[]> {
   const { data, error } = await supabase
     .from("unlink_requests")
     .select("*")
-    .order("submitted_at", { ascending: false });
+    .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
 
   const designerIds = [...new Set((data ?? []).map((row) => row.designer_id).filter(Boolean))];
@@ -90,11 +90,12 @@ export async function createUnlinkRequest(input: {
     .from("unlink_requests")
     .select("id")
     .eq("customer_id", customerId)
+    .eq("designer_id", designerId)
     .in("status", ["pending", "designer_review"])
     .limit(1)
     .maybeSingle();
   if (openRequest) {
-    throw new Error("You already have an open unlink request with admin.");
+    throw new Error("You already have an open unlink request for this designer.");
   }
 
   const submittedAt = new Date().toLocaleDateString("en-GB", {
@@ -118,14 +119,15 @@ export async function createUnlinkRequest(input: {
     .single();
   if (error) throw new Error(error.message);
 
+  const mapped = mapUnlinkRequest(data);
   await patchCustomerLink(customerId, {
-    unlinkStatus: "pending",
-    unlinkReason: input.reason,
-    unlinkSubmittedAt: submittedAt,
+    unlinkStatus: mapped.status,
+    unlinkReason: mapped.status === "approved" ? null : input.reason,
+    unlinkSubmittedAt: mapped.status === "approved" ? null : submittedAt,
     activeUnlinkRequestId: data.id,
   });
 
-  return mapUnlinkRequest(data);
+  return mapped;
 }
 
 export async function updateUnlinkRequest(
@@ -343,6 +345,9 @@ export async function listAdminRelationships(): Promise<AdminRelationship[]> {
   const customerIdsWithActiveLink = new Set(
     (relationships ?? []).filter((row) => row.is_active).map((row) => row.customer_id)
   );
+  const customerIdsWithAnyRelationship = new Set(
+    (relationships ?? []).map((row) => row.customer_id)
+  );
 
   const rows: AdminRelationship[] = (relationships ?? []).map((row) => {
     const designer = designerById.get(row.designer_id);
@@ -371,6 +376,7 @@ export async function listAdminRelationships(): Promise<AdminRelationship[]> {
 
   for (const customer of customers) {
     if (customerIdsWithActiveLink.has(customer.id)) continue;
+    if (customerIdsWithAnyRelationship.has(customer.id)) continue;
 
     const accountStatus = customer.user_id
       ? (userById.get(customer.user_id)?.account_status ?? "active")
