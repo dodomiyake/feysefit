@@ -68,8 +68,9 @@ function AdminProjectSupportRecord({
   backHref: string;
   backLabel: string;
 }) {
-  const isClosed = isClosedProject(project.status);
-  const recordState = isClosed ? getProjectStatusLabel(project.status) : "Archived relationship";
+  const recordState = project.relationshipArchivedAt
+    ? "Archived relationship"
+    : getProjectStatusLabel(project.status);
   const items = project.items ?? [];
   const referenceCount =
     (project.referenceImages?.length ?? 0) + (project.customerReferences?.length ?? 0);
@@ -95,9 +96,9 @@ function AdminProjectSupportRecord({
               {project.title}
             </h1>
             <p className="mt-3 max-w-3xl text-sm leading-relaxed text-primary/65 lg:text-base">
-              This is not a live production workspace. The client/designer workflow, timeline
-              controls, delivery tools and normal messaging actions are hidden because this record
-              is {recordState.toLowerCase()}.
+              This is an internal project record for support, moderation and audit. Admin does not
+              use the live client/designer production workspace, so timeline controls, delivery
+              tools and normal messaging actions are hidden here.
             </p>
           </div>
           <div className="rounded-xl border border-primary/10 bg-background/60 px-4 py-3 text-right">
@@ -166,7 +167,7 @@ function AdminProjectSupportRecord({
               <RecordField label="Measurements" value={hasMeasurements ? "Recorded" : "Not recorded"} />
               <RecordField
                 label="Conversation state"
-                value={project.relationshipArchivedAt ? "Archived read-only" : "Read-only"}
+                value={project.relationshipArchivedAt ? "Archived read-only" : "Internal read-only"}
               />
             </div>
           </section>
@@ -245,7 +246,7 @@ export function ProjectDetailsContent({
   const hasReferences = (project.customerReferences?.length ?? 0) > 0;
   const hasTeam = details.teamMembers.length > 0;
 
-  if (isAdmin && (isClosedProject(project.status) || project.relationshipArchivedAt)) {
+  if (isAdmin) {
     return (
       <AdminProjectSupportRecord
         project={project}
@@ -268,12 +269,6 @@ export function ProjectDetailsContent({
   return (
     <div className="mx-auto max-w-7xl px-5 pb-8 pt-6 lg:px-16 lg:pb-10 lg:pt-8">
       <DesktopBackNav href={backHref} label={backLabel} />
-
-      {isAdmin && (
-        <p className="mb-4 rounded-lg border border-primary/10 bg-surface-container px-4 py-2.5 text-sm text-primary/70">
-          Admin read-only view — internal notes and production details for support and moderation.
-        </p>
-      )}
 
       <ProjectDetailsHero
         project={project}
