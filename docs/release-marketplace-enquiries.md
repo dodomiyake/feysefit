@@ -22,17 +22,68 @@ This release introduces the marketplace enquiry workflow and the relationship/pr
 - Admin relationship views default to current links and label old links as ended/unlinked.
 - Admin recent activity is compacted to the latest snapshot so the dashboard does not grow into an unbounded log wall.
 
-## Database patches included on the feature branch
+## Production preparation status
 
-Apply the matching SQL patches before deploying the marketplace app code to any environment:
+Production Supabase project checked before merge:
 
-- `supabase/patch-marketplace-enquiries.sql`
-- `supabase/patch-self-unlink-no-active-project.sql`
-- `supabase/patch-safe-designer-project-creation.sql`
-- `supabase/patch-project-cancel-delete-controls.sql`
-- `supabase/patch-auto-approved-unlink-admin-sync.sql`
+- Project: `FeyseFit`
+- Project ref: `beqkjbveqxiozdqpwywi`
+- Status: active/healthy at time of release preparation
+- Production migration history currently reports no tracked migrations
+- Required hardening and marketplace RPCs/tables are not yet present in production
+- Production Security Advisor still reports leaked-password protection disabled
 
-Security hardening patches from PR #3 must be applied before or with this release where required by the app code.
+Do not merge/deploy production until the production SQL and dashboard settings below are complete.
+
+## Production SQL order
+
+Apply SQL during a production maintenance window. Take a production backup first.
+
+### 1. Security hardening from PR #3
+
+Apply in this order, using the full SQL files:
+
+1. `supabase/patch-designer-private-details.sql` if the first hardening pass is not already live on production.
+2. `supabase/patch-testimonial-view-lockdown.sql` if the first hardening pass is not already live on production.
+3. `supabase/patch-function-execute-lockdown.sql` if the first hardening pass is not already live on production.
+4. `supabase/patch-admin-aal-rls.sql` if the first hardening pass is not already live on production.
+5. `supabase/patch-security-audit-followup.sql`
+6. `supabase/patch-security-audit-followup-2.sql`
+7. `supabase/patch-security-audit-followup-3.sql`
+8. `supabase/patch-security-audit-followup-4.sql`
+
+After these patches, verify that `consume_rate_limit_server(text,text)` exists and that browser roles cannot execute the old public limiter/logging/invite RPCs.
+
+### 2. Marketplace enquiry workflow from PR #4
+
+Apply in this order, using the full SQL files:
+
+1. `supabase/patch-marketplace-enquiries.sql`
+2. `supabase/patch-marketplace-enquiry-conversations.sql`
+3. `supabase/patch-marketplace-enquiry-live-unlink.sql`
+4. `supabase/patch-self-unlink-no-active-project.sql`
+5. `supabase/patch-safe-designer-project-creation.sql`
+6. `supabase/patch-project-cancel-delete-controls.sql`
+7. `supabase/patch-delete-closed-project-rpc.sql`
+8. `supabase/patch-auto-approved-unlink-admin-sync.sql`
+
+## Dashboard and environment gates
+
+Before merging PRs into `master`, confirm production has:
+
+- Supabase Auth leaked-password protection enabled.
+- Supabase Auth captcha/Turnstile settings confirmed if production signup uses captcha.
+- Vercel production server-only variables set:
+  - `SECURITY_COOKIE_SECRET`
+  - `RATE_LIMIT_HMAC_SECRET`
+  - `SECURITY_EVENT_HMAC_SECRET`
+  - `SUPABASE_SERVICE_ROLE_KEY`
+  - `TURNSTILE_SECRET_KEY`
+  - `CRON_SECRET`
+  - `USE_LEGACY_API=false`
+- Vercel production public variables point to production Supabase, not staging:
+  - `NEXT_PUBLIC_SUPABASE_URL`
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
 ## Staging verification summary
 
