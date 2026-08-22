@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/Button";
 import { TextArea } from "@/components/ui/TextArea";
 import { Badge } from "@/components/ui/Badge";
 import {
-  canCustomerRequestUnlink,
   getMarketplaceBlockReason,
   isLinkedCustomer,
 } from "@/lib/customer-access";
@@ -21,8 +20,17 @@ const statusLabels = {
   none: "",
 };
 
+const openUnlinkStatuses = new Set(["pending", "designer_review"]);
+
 export function UnlinkRequestSection() {
-  const { authUser, customerLink, submitUnlinkRequest, canAccessMarketplace, projects } = useApp();
+  const {
+    authUser,
+    customerLink,
+    submitUnlinkRequest,
+    canAccessMarketplace,
+    projects,
+    unlinkRequests,
+  } = useApp();
   const [reason, setReason] = useState("");
   const [showForm, setShowForm] = useState(false);
 
@@ -38,7 +46,18 @@ export function UnlinkRequestSection() {
     );
   }, [authUser?.customerId, customerLink.linkedDesignerId, projects]);
 
+  const hasOpenUnlinkRequestForLinkedDesigner = useMemo(() => {
+    if (!customerLink.linkedDesignerId) return false;
+    return unlinkRequests.some(
+      (request) =>
+        openUnlinkStatuses.has(request.status) &&
+        (!authUser?.customerId || request.customerId === authUser.customerId) &&
+        request.designerId === customerLink.linkedDesignerId
+    );
+  }, [authUser?.customerId, customerLink.linkedDesignerId, unlinkRequests]);
+
   const hasBlockingProjects = blockingProjects.length > 0;
+  const canStartUnlink = Boolean(customerLink.linkedDesignerId) && !hasBlockingProjects;
 
   if (!isLinkedCustomer(customerLink) && customerLink.unlinkStatus !== "approved") {
     return null;
@@ -109,9 +128,15 @@ export function UnlinkRequestSection() {
           </div>
         )}
 
-        {canCustomerRequestUnlink(customerLink) && !hasBlockingProjects && (
+        {canStartUnlink && (
           <>
-            {!showForm ? (
+            {hasOpenUnlinkRequestForLinkedDesigner ? (
+              <div className="rounded-lg bg-highlight/10 px-4 py-3">
+                <p className="text-xs font-medium text-accent">
+                  Your unlink request for this designer is already in progress.
+                </p>
+              </div>
+            ) : !showForm ? (
               <Button variant="secondary" size="sm" onClick={() => setShowForm(true)}>
                 End relationship
               </Button>
