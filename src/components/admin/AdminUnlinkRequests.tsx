@@ -28,11 +28,18 @@ type StatusFilter = "all" | "active" | UnlinkRequestStatus;
 
 const defaultDateRange: DateRangeFilter = { preset: "all" };
 
+function getRequestStatusLabel(request: UnlinkRequest) {
+  if (request.status === "approved" && request.adminNotes?.toLowerCase().includes("auto-approved")) {
+    return "Auto-approved";
+  }
+  return statusBadge[request.status].label;
+}
+
 export function AdminUnlinkRequests() {
   const { unlinkRequests, adminSendDesignerConfirmation, adminApproveUnlink, adminDeclineUnlink, projects } =
     useApp();
   const [adminNotes, setAdminNotes] = useState<Record<string, string>>({});
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("active");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [dateRange, setDateRange] = useState<DateRangeFilter>(defaultDateRange);
 
   const filtered = useMemo(() => {
@@ -56,7 +63,7 @@ export function AdminUnlinkRequests() {
     { header: "Client", value: (row: UnlinkRequest) => row.customerName },
     { header: "Designer", value: (row: UnlinkRequest) => row.designerName },
     { header: "Reason", value: (row: UnlinkRequest) => row.reason },
-    { header: "Status", value: (row: UnlinkRequest) => row.status },
+    { header: "Status", value: (row: UnlinkRequest) => getRequestStatusLabel(row) || row.status },
     { header: "Submitted", value: (row: UnlinkRequest) => row.submittedAt },
     { header: "Designer response", value: (row: UnlinkRequest) => row.designerConfirmation ?? "" },
   ];
@@ -67,7 +74,7 @@ export function AdminUnlinkRequests() {
         <div>
           <h2 className="font-headline text-lg font-semibold text-primary">Client Unlink Requests</h2>
           <p className="mt-1 text-sm text-primary/60">
-            Review reason → Send confirmation to designer → Review response → Approve or decline
+            Review active requests and keep an audit trail of instant no-project unlinks.
           </p>
         </div>
         <AdminExportButton
@@ -81,11 +88,11 @@ export function AdminUnlinkRequests() {
         <Select
           label="Status"
           options={[
-            { value: "active", label: "Active requests" },
             { value: "all", label: "All requests" },
+            { value: "active", label: "Needs action" },
             { value: "pending", label: "Pending review" },
             { value: "designer_review", label: "Awaiting designer" },
-            { value: "approved", label: "Approved" },
+            { value: "approved", label: "Approved / auto-approved" },
             { value: "declined", label: "Declined" },
           ]}
           value={statusFilter}
@@ -130,7 +137,7 @@ export function AdminUnlinkRequests() {
                     <Badge variant={statusBadge[request.status].variant}>
                       {request.designerConfirmation === "awaiting"
                         ? "Awaiting designer"
-                        : statusBadge[request.status].label}
+                        : getRequestStatusLabel(request)}
                     </Badge>
                   )}
                 </div>
@@ -263,7 +270,12 @@ export function AdminUnlinkRequests() {
                   </div>
                 )}
 
-                {request.status === "approved" && (
+                {request.status === "approved" && request.adminNotes?.toLowerCase().includes("auto-approved") && (
+                  <p className="text-xs text-accent">
+                    Client unlinked automatically because no active project was open with this designer.
+                  </p>
+                )}
+                {request.status === "approved" && !request.adminNotes?.toLowerCase().includes("auto-approved") && (
                   <p className="text-xs text-accent">
                     Client unlinked — conversations archived read-only. Marketplace access granted.
                   </p>
