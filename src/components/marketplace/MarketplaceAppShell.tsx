@@ -6,6 +6,7 @@ import { AuthRouteGuard } from "@/components/auth/AuthRouteGuard";
 import { SessionIdleGuard } from "@/components/auth/SessionIdleGuard";
 import { Toast } from "@/components/ui/Toast";
 import { useApp } from "@/context/AppContext";
+import { PublicMarketplaceFooter } from "./PublicMarketplaceFooter";
 import { PublicMarketplaceHeader } from "./PublicMarketplaceHeader";
 
 interface MarketplaceAppShellProps {
@@ -32,6 +33,7 @@ export function MarketplaceAppShell({
           <SessionIdleGuard />
           <AuthRouteGuard>{children}</AuthRouteGuard>
         </main>
+        <PublicMarketplaceFooter />
         <Toast />
       </>
     );
