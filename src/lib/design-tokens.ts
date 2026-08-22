@@ -24,6 +24,8 @@ export const productionProjectStatuses = [
   "Ready for Delivery",
 ] as const;
 
+export const LEGACY_DELIVERED_STATUS = "Delivered" as const;
+
 export const postDeliveryProjectStatuses = [
   "Awaiting Customer Confirmation",
   "Issue Reported",
@@ -34,12 +36,21 @@ export const postDeliveryProjectStatuses = [
   "Admin Support",
 ] as const;
 
-export const LEGACY_DELIVERED_STATUS = "Delivered" as const;
+export const exceptionProjectStatuses = ["Cancelled", "Admin Support"] as const;
 
-export const projectStatuses = [
+export const timelineProjectStatuses = [
   ...productionProjectStatuses,
   LEGACY_DELIVERED_STATUS,
-  ...postDeliveryProjectStatuses,
+  "Awaiting Customer Confirmation",
+  "Issue Reported",
+  "Adjustment Needed",
+  "Re-delivered",
+  "Completed",
+] as const;
+
+export const projectStatuses = [
+  ...timelineProjectStatuses,
+  ...exceptionProjectStatuses,
 ] as const;
 
 export type ProjectStatus = (typeof projectStatuses)[number];
@@ -49,8 +60,6 @@ export const designerPipelineStatuses = [
   "Awaiting Customer Confirmation",
   "Adjustment Needed",
   "Re-delivered",
-  "Cancelled",
-  "Admin Support",
 ] as const;
 
 export type UserRole = "designer" | "customer" | "admin";

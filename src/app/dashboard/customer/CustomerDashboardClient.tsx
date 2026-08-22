@@ -75,7 +75,7 @@ export default function CustomerDashboardClient() {
         <div className="mb-6 lg:hidden">
           <h1 className="font-headline text-2xl font-bold text-primary">Welcome back, {firstName}</h1>
           <p className="mt-2 text-sm leading-relaxed text-primary/60">
-            {activeProject
+            {activeProject && customerLink.linkedDesignerId
               ? awaitingConfirmation
                 ? isRedelivery
                   ? `${activeProject.title} has been redelivered — please confirm receipt when you're ready.`
@@ -85,7 +85,9 @@ export default function CustomerDashboardClient() {
                   : isPostDelivery
                     ? `Your designer is following up on your delivery concern for ${activeProject.title}.`
                     : `Your bespoke journey is progressing beautifully. Your designer is currently finalizing the details of your ${activeProject.title}.`
-              : "Your bespoke journey starts here. Link with your designer to see project updates."}
+              : activeProject
+                ? "Your previous commission is archived. Its history remains available read-only."
+                : "Your bespoke journey starts here. Link with your designer to see project updates."}
           </p>
         </div>
 
@@ -187,11 +189,6 @@ export default function CustomerDashboardClient() {
               </div>
             </div>
 
-            <CustomerProjectTimeline
-              key={`${activeProject.id}-${activeProject.status}`}
-              projectId={activeProject.id}
-            />
-
             <CustomerProjectItemsPreview project={activeProject} />
 
             <div className="mt-6">
@@ -205,11 +202,27 @@ export default function CustomerDashboardClient() {
             </div>
           </>
         ) : isLinkedCustomer(customerLink) && designer ? (
-          <EmptyState
-            icon={FolderOpen}
-            title="No active project"
-            description="Once your designer creates a project for you, you'll see progress and updates here."
-          />
+          <div className="space-y-4">
+            <EmptyState
+              icon={FolderOpen}
+              title="No active project"
+              description="Your designer has not created an active project yet. You can keep discussing the enquiry, or end this designer relationship if you are not moving ahead."
+            />
+            <div className="rounded-xl border border-primary/10 bg-card p-5 shadow-warm sm:flex sm:items-center sm:justify-between sm:gap-4">
+              <div>
+                <p className="text-sm font-semibold text-primary">No project is holding this relationship open</p>
+                <p className="mt-1 text-xs leading-relaxed text-primary/60">
+                  Because there is no active project with {designer.businessName}, you can unlink without waiting for the designer to cancel anything.
+                </p>
+              </div>
+              <Link
+                href="/settings#unlink"
+                className="mt-4 inline-flex w-full items-center justify-center rounded-full bg-zinc-900 px-5 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-zinc-800 sm:mt-0 sm:w-auto"
+              >
+                End relationship
+              </Link>
+            </div>
+          </div>
         ) : (
           <EmptyState
             icon={FolderOpen}

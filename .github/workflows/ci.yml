@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [master, main, security/**]
+    branches: [master, main, security/**, feature/**]
   pull_request:
-    branches: [master, main]
+    branches: [master, main, security/**]
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -191,6 +191,27 @@ jobs:
           PGUSER: postgres
           PGDATABASE: feysefit_ci
         run: psql -v ON_ERROR_STOP=1 -f supabase/patch-security-audit-followup-4.sql
+      - name: Apply marketplace enquiries
+        env:
+          PGPASSWORD: postgres
+          PGHOST: localhost
+          PGUSER: postgres
+          PGDATABASE: feysefit_ci
+        run: psql -v ON_ERROR_STOP=1 -f supabase/patch-marketplace-enquiries.sql
+      - name: Apply marketplace enquiry conversations
+        env:
+          PGPASSWORD: postgres
+          PGHOST: localhost
+          PGUSER: postgres
+          PGDATABASE: feysefit_ci
+        run: psql -v ON_ERROR_STOP=1 -f supabase/patch-marketplace-enquiry-conversations.sql
+      - name: Apply live enquiry unlink consistency
+        env:
+          PGPASSWORD: postgres
+          PGHOST: localhost
+          PGUSER: postgres
+          PGDATABASE: feysefit_ci
+        run: psql -v ON_ERROR_STOP=1 -f supabase/patch-marketplace-enquiry-live-unlink.sql
       - name: Assert security audit follow-up 1
         env:
           PGPASSWORD: postgres
@@ -219,3 +240,10 @@ jobs:
           PGUSER: postgres
           PGDATABASE: feysefit_ci
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/security-audit-followup-4.sql
+      - name: Assert marketplace enquiries
+        env:
+          PGPASSWORD: postgres
+          PGHOST: localhost
+          PGUSER: postgres
+          PGDATABASE: feysefit_ci
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/marketplace-enquiries.sql

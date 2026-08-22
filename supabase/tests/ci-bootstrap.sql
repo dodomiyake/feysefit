@@ -148,6 +148,8 @@ create table if not exists public.designer_profiles (
   appointment_slot_minutes integer,
   offered_meeting_modes text[],
   service_areas text[],
+  phone text,
+  admin_notes text,
   marketplace_live boolean default false,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
@@ -190,6 +192,58 @@ create table if not exists public.designer_customer_relationships (
   primary key (designer_id, customer_id)
 );
 alter table public.designer_customer_relationships enable row level security;
+
+-- Baseline ownership helpers required by the project-policy hardening patches.
+-- The disposable fixture keeps the studio-client path closed because it does
+-- not model that feature's table.
+create or replace function public.designer_owns_active_customer_link(
+  p_designer_id uuid,
+  p_customer_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$
+  select
+    p_designer_id is not null
+    and p_customer_id is not null
+    and auth.uid() is not null
+    and exists (
+      select 1
+      from public.designer_profiles d
+      where d.id = p_designer_id
+        and d.user_id = auth.uid()
+    )
+    and exists (
+      select 1
+      from public.designer_customer_relationships r
+      where r.designer_id = p_designer_id
+        and r.customer_id = p_customer_id
+        and r.is_active = true
+    )
+$$;
+
+create or replace function public.designer_owns_studio_client(
+  p_studio_client_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$ select false $$;
+
+create or replace function public.designer_authorized_for_project(
+  p_project_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$ select false $$;
 
 do $$ begin
   create type public.invite_status as enum ('pending', 'accepted', 'expired');
@@ -238,17 +292,42 @@ create table if not exists public.testimonials (
 );
 alter table public.testimonials enable row level security;
 
+do $$ begin
+  create type public.report_status as enum ('open', 'resolved', 'dismissed');
+exception when duplicate_object then null;
+end $$;
+
+create table if not exists public.testimonial_reports (
+  id uuid primary key default gen_random_uuid(),
+  legacy_id text unique,
+  testimonial_id uuid not null references public.testimonials (id) on delete cascade,
+  reporter_id uuid not null references public.users (id) on delete cascade,
+  reason text not null,
+  detail text not null default '',
+  status public.report_status not null default 'open',
+  created_at timestamptz not null default now()
+);
+alter table public.testimonial_reports enable row level security;
+
 create table if not exists public.projects (
   id uuid primary key default gen_random_uuid(),
-  project_code text,
-  title text,
-  customer_name text,
+  project_code text not null,
+  title text not null,
+  customer_name text not null,
   customer_id uuid,
-  designer_id uuid,
-  outfit_type text,
-  deadline date,
-  budget numeric,
-  status text
+  studio_client_id uuid,
+  designer_id uuid not null,
+  outfit_type text not null,
+  deadline text not null,
+  budget text not null,
+  description text not null default '',
+  status text not null default 'Enquiry',
+  customer_update text not null default '',
+  internal_notes text not null default '',
+  started_date text,
+  last_updated text,
+  relationship_archived_at timestamptz,
+  updated_at timestamptz not null default now()
 );
 alter table public.projects enable row level security;
 
@@ -261,7 +340,15 @@ alter table public.messages enable row level security;
 
 create table if not exists public.project_items (
   id uuid primary key default gen_random_uuid(),
-  project_id uuid
+  project_id uuid not null,
+  sort_order integer not null default 0,
+  title text not null,
+  outfit_type text not null default '',
+  description text not null default '',
+  status text not null default 'Enquiry',
+  deadline text not null default '',
+  price text not null default '',
+  internal_notes text not null default ''
 );
 alter table public.project_items enable row level security;
 
@@ -300,8 +387,8 @@ create or replace function public.consume_rate_limit(
   p_window_seconds integer
 ) returns boolean language sql as $$ select true $$;
 
-create or replace function public.project_status_blocks_unlink()
-returns boolean language sql as $$ select false $$;
+create or replace function public.project_status_blocks_unlink(p_status text)
+returns boolean language sql immutable as $$ select false $$;
 
 create or replace function public.touch_testimonial_updated_at()
 returns trigger language plpgsql as $$ begin return new; end $$;
@@ -315,8 +402,12 @@ returns trigger language plpgsql as $$ begin return new; end $$;
 create or replace function public.coarse_device_hint(text)
 returns text language sql as $$ select $1 $$;
 
-create or replace function public.is_messaging_shell_project(uuid)
-returns boolean language sql as $$ select false $$;
+create or replace function public.is_messaging_shell_project(
+  p_title text,
+  p_outfit_type text,
+  p_status text
+)
+returns boolean language sql immutable as $$ select false $$;
 
 create or replace function public.project_is_active_for_customer(uuid)
 returns boolean language sql as $$ select true $$;

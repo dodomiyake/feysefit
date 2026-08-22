@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Lock, Search, Shield } from "lucide-react";
 import { DesignerMarketplaceCard } from "@/components/ui/DesignerMarketplaceCard";
@@ -18,7 +19,7 @@ import {
   type MarketplaceRatingFilter,
 } from "@/lib/marketplace-display";
 
-const INITIAL_VISIBLE = 6;
+const INITIAL_VISIBLE = 12;
 
 function marketplaceHref(query: string) {
   const params = new URLSearchParams(
@@ -84,8 +85,8 @@ export function MarketplacePageClient({ initialQuery }: { initialQuery: string }
 
   return (
     <MarketplaceAppShell title="Marketplace" backHref={backHref}>
-      <div className="mx-auto max-w-6xl px-5 py-6 lg:px-8 lg:py-10">
-        <div className="mb-8 lg:mb-10">
+      <div className="mx-auto max-w-7xl px-5 py-6 lg:px-8 lg:py-10">
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between lg:mb-10">
           <div className="lg:hidden">
             <h1 className="font-headline text-3xl font-bold text-primary">Marketplace</h1>
             <p className="mt-2 max-w-xl text-sm leading-relaxed text-primary/60">
@@ -103,6 +104,14 @@ export function MarketplacePageClient({ initialQuery }: { initialQuery: string }
               for your next masterpiece.
             </p>
           </div>
+          {(role === "customer" || role === "designer") && (
+            <Link
+              href="/enquiries"
+              className="inline-flex min-h-11 items-center justify-center self-start rounded-full border border-primary/15 px-5 text-sm font-semibold text-primary transition-colors hover:bg-primary hover:text-white sm:self-auto"
+            >
+              {role === "designer" ? "Client enquiries" : "My enquiries"}
+            </Link>
+          )}
         </div>
 
         <div className="relative mb-6 lg:hidden">
@@ -174,7 +183,18 @@ export function MarketplacePageClient({ initialQuery }: { initialQuery: string }
           </p>
         </div>
 
-        <div className="mt-8 grid grid-cols-1 justify-center gap-6 md:grid-cols-[repeat(auto-fit,minmax(20rem,22rem))]">
+        {directoryState === "results" && (
+          <div className="mt-8 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm font-medium text-primary/65">
+              Showing {visibleDesigners.length} of {filtered.length} designers
+            </p>
+            <p className="text-xs text-primary/45">
+              Use search and filters to narrow the marketplace.
+            </p>
+          </div>
+        )}
+
+        <div className="mt-5 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {directoryState === "loading" ? (
             <p className="col-span-full rounded-2xl bg-card p-10 text-center text-sm text-primary/60">
               Loading designers...
@@ -207,7 +227,7 @@ export function MarketplacePageClient({ initialQuery }: { initialQuery: string }
               className="gap-2 bg-background/80 px-10"
               onClick={() => setVisibleCount((count) => count + INITIAL_VISIBLE)}
             >
-              Discover More Designers
+              Load More Designers
               <ChevronDown className="h-4 w-4" />
             </Button>
           </div>

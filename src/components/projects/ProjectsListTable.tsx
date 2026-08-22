@@ -2,16 +2,20 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { ArrowRight, Search } from "lucide-react";
+import { ArrowRight, Search, Trash2 } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { ListPagination } from "@/components/ui/ListPagination";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { useListPagination } from "@/hooks/useListPagination";
 import { projectStatuses } from "@/lib/design-tokens";
+import { isActiveCommission } from "@/lib/project-delivery";
+import { createClient } from "@/lib/supabase/client";
+import { isSupabaseEnabled } from "@/lib/config/backend";
+import { deleteProjectFromStore } from "@/lib/project-storage";
 import type { Project } from "@/lib/mock-data";
 
 export function ProjectsListTable() {
-  const { projects } = useApp();
+  const { projects, syncProjects, showToast } = useApp();
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
@@ -32,6 +36,39 @@ export function ProjectsListTable() {
     20,
     resetKey
   );
+
+  async function handleDeleteProject(project: Project) {
+    if (isActiveCommission(project.status)) {
+      showToast(
+        "This project is still active. Cancel, complete, or move it to admin support before deleting it.",
+        "error"
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete ${project.title}? This removes the closed project from the project list.`
+    );
+    if (!confirmed) return;
+
+    try {
+      if (isSupabaseEnabled()) {
+        const supabase = createClient();
+        const { error } = await (supabase as any).rpc("delete_closed_project", {
+          p_project_key: project.id,
+        });
+        if (error) throw new Error(error.message);
+      } else {
+        deleteProjectFromStore(project.id);
+      }
+
+      await syncProjects();
+      showToast("Project deleted");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not delete this project";
+      showToast(message, "error");
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -72,7 +109,7 @@ export function ProjectsListTable() {
               <col className="w-[22%]" />
               <col className="w-[12%]" />
               <col className="w-[10%]" />
-              <col className="w-10" />
+              <col className="w-20" />
             </colgroup>
             <thead>
               <tr className="border-b border-primary/10 text-left text-xs uppercase tracking-wider text-primary/50">
@@ -82,7 +119,7 @@ export function ProjectsListTable() {
                 <th className="p-3 font-semibold">Status</th>
                 <th className="hidden p-3 font-semibold lg:table-cell">Deadline</th>
                 <th className="hidden p-3 font-semibold xl:table-cell">Budget</th>
-                <th className="p-3" aria-label="Open" />
+                <th className="p-3" aria-label="Actions" />
               </tr>
             </thead>
             <tbody>
@@ -115,13 +152,28 @@ export function ProjectsListTable() {
                     {project.budget || "—"}
                   </td>
                   <td className="p-3 align-middle">
-                    <Link
-                      href={`/projects/${project.id}`}
-                      className="inline-flex rounded-full p-1.5 text-primary/40 transition-colors hover:bg-primary/5 hover:text-accent"
-                      aria-label={`Open ${project.title}`}
-                    >
-                      <ArrowRight className="h-4 w-4" />
-                    </Link>
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          void handleDeleteProject(project);
+                        }}
+                        className="inline-flex rounded-full p-1.5 text-primary/35 transition-colors hover:bg-red-50 hover:text-red-600"
+                        aria-label={`Delete ${project.title}`}
+                        title="Delete closed project"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                      <Link
+                        href={`/projects/${project.id}`}
+                        className="inline-flex rounded-full p-1.5 text-primary/40 transition-colors hover:bg-primary/5 hover:text-accent"
+                        aria-label={`Open ${project.title}`}
+                      >
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ))}

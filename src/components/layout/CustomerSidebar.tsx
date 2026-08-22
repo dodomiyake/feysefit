@@ -10,6 +10,7 @@ import {
   Settings,
   Lock,
   Ruler,
+  Inbox,
 } from "lucide-react";
 import { AppSidebar, sidebarNavClass } from "./AppSidebar";
 import { SidebarLogout } from "./SidebarLogout";
@@ -48,6 +49,12 @@ export function CustomerSidebar() {
       icon: MessageSquare,
       label: "Messages",
       isActive: pathname === "/messages" || pathname.startsWith("/messages/"),
+    },
+    {
+      href: "/enquiries",
+      icon: Inbox,
+      label: "Enquiries",
+      isActive: pathname === "/enquiries" || pathname.startsWith("/enquiries/"),
     },
   ];
 

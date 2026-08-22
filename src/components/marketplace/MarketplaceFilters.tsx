@@ -54,16 +54,19 @@ export function MarketplaceFilters({
   const advancedActive = hasActiveAdvancedFilters(location, minRating, priceRange, inPersonOnly);
 
   return (
-    <div className="rounded-2xl border border-primary/10 bg-card/60 p-4 lg:p-5">
-      <div className="flex flex-wrap items-end gap-3 lg:gap-4">
-        <div className="min-w-0 flex-1">
+    <div className="overflow-hidden rounded-2xl border border-primary/10 bg-card/60 p-4 lg:p-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between lg:gap-4">
+        <div className="min-w-0 lg:flex-1">
           <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary/45 lg:hidden">
             Quick Filters
           </p>
           <p className="hidden text-[10px] font-semibold uppercase tracking-[0.2em] text-primary/45 lg:block">
             Category
           </p>
-          <div className="mt-3 flex gap-2 overflow-x-auto pb-1 lg:flex-wrap lg:overflow-visible">
+          <div
+            className="-mx-1 mt-3 flex max-w-full gap-2 overflow-x-auto px-1 pb-2 lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0 lg:pb-0"
+            aria-label="Marketplace category filters"
+          >
             {marketplaceCategories.map((item) => (
               <button
                 key={item}
@@ -85,7 +88,7 @@ export function MarketplaceFilters({
           type="button"
           variant={advancedActive ? "primary" : "zinc"}
           size="sm"
-          className="shrink-0 gap-2 px-4 lg:px-5"
+          className="w-full shrink-0 gap-2 px-4 lg:w-auto lg:px-5"
           onClick={onToggleAdvanced}
           aria-expanded={showAdvanced}
         >

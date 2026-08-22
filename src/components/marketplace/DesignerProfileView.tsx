@@ -9,9 +9,8 @@ import { getDesignerProfileMeta, type PortfolioPiece } from "@/lib/designer-prof
 import { resolveDesignerYearsExperience } from "@/lib/designer-display";
 import { useApp } from "@/context/AppContext";
 import { BackButton } from "@/components/ui/BackButton";
-import { MapPin, Star, Mail, PenLine, Quote, BadgeCheck } from "lucide-react";
+import { MapPin, Star, PenLine, Quote, BadgeCheck } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { designerMessageThreadHref } from "@/lib/message-links";
 import { shouldShowCustomerMarketplaceCTAs } from "@/lib/marketplace-display";
 import { AppointmentRequestPanel } from "@/components/marketplace/AppointmentRequestPanel";
 
@@ -41,30 +40,19 @@ function ServiceAreaChips({ areas }: { areas: string[] }) {
 }
 
 function ProfileCommissionActions({
-  messageHref,
   requestHref,
 }: {
-  messageHref: string;
   requestHref: string;
 }) {
   return (
     <div className="flex flex-wrap gap-3">
-      <Link href={messageHref} className="min-w-36 flex-1">
-        <button
-          type="button"
-          className="flex w-full items-center justify-center gap-2 rounded-full border border-primary/15 bg-surface px-6 py-2.5 text-sm font-medium text-primary hover:bg-surface-container"
-        >
-          <Mail className="h-4 w-4" />
-          Message
-        </button>
-      </Link>
       <Link href={requestHref} className="min-w-36 flex-1">
         <button
           type="button"
           className="flex w-full items-center justify-center gap-2 rounded-full bg-primary px-8 py-2.5 text-sm font-medium text-white shadow-lg shadow-primary/20 hover:opacity-90"
         >
           <PenLine className="h-4 w-4" />
-          Request Design
+          Make an Enquiry
         </button>
       </Link>
     </div>
@@ -157,8 +145,8 @@ export function DesignerProfileView({ designer }: DesignerProfileViewProps) {
   const meta = getDesignerProfileMeta(designer.id);
   const isLinkedDesigner = customerLink.linkedDesignerId === designer.id;
 
-  const requestHref = `/marketplace/${designer.id}/request`;
-  const messageHref = designerMessageThreadHref(designer.id);
+  const requestPath = `/marketplace/${designer.id}/request`;
+  const requestHref = role ? requestPath : `/login?next=${encodeURIComponent(requestPath)}`;
   const tags = meta?.specialtyTags ?? [designer.specialty];
   const designsCount = meta?.designsCount ?? designer.reviewCount;
   const yearsExp = resolveDesignerYearsExperience(designer, meta);
@@ -214,8 +202,8 @@ export function DesignerProfileView({ designer }: DesignerProfileViewProps) {
         {showCustomerCTAs && isLinkedDesigner && customerLink.linkedDesignerName && (
           <p className="mt-6 rounded-lg border border-accent/20 bg-highlight/10 px-4 py-3 text-sm text-primary">
             You are privately linked to {customerLink.linkedDesignerName}.{" "}
-            <Link href={messageHref} className="font-medium text-accent hover:underline">
-              Open your project chat
+              <Link href="/enquiries" className="font-medium text-accent hover:underline">
+                View your enquiries
             </Link>
           </p>
         )}
@@ -288,15 +276,15 @@ export function DesignerProfileView({ designer }: DesignerProfileViewProps) {
 
             {showCustomerCTAs && (
               <div className="mt-5">
-                <ProfileCommissionActions messageHref={messageHref} requestHref={requestHref} />
+                <ProfileCommissionActions requestHref={requestHref} />
               </div>
             )}
 
             {showCustomerCTAs && isLinkedDesigner && customerLink.linkedDesignerName && (
               <p className="mt-5 rounded-lg border border-accent/20 bg-highlight/10 px-4 py-3 text-sm text-primary">
                 You are privately linked to {customerLink.linkedDesignerName}.{" "}
-                <Link href={messageHref} className="font-medium text-accent hover:underline">
-                  Open your project chat
+                <Link href="/enquiries" className="font-medium text-accent hover:underline">
+                  View your enquiries
                 </Link>
               </p>
             )}
@@ -453,7 +441,7 @@ export function DesignerProfileView({ designer }: DesignerProfileViewProps) {
             </div>
             <p className="hidden text-sm text-primary/55 sm:block">Currently available for new commissions</p>
             <div className="hidden h-6 w-px bg-primary/15 sm:block" />
-            <ProfileCommissionActions messageHref={messageHref} requestHref={requestHref} />
+            <ProfileCommissionActions requestHref={requestHref} />
           </div>
         </div>
       )}

@@ -4,6 +4,7 @@ import {
   postDeliveryProjectStatuses,
   productionProjectStatuses,
   projectStatuses,
+  timelineProjectStatuses,
 } from "@/lib/design-tokens";
 
 export { LEGACY_DELIVERED_STATUS, productionProjectStatuses, postDeliveryProjectStatuses };
@@ -116,6 +117,10 @@ export function isProjectCompleted(status: ProjectStatus | string) {
   return normalizeProjectStatus(status) === "Completed";
 }
 
+export function isProjectCancelled(status: ProjectStatus | string) {
+  return normalizeProjectStatus(status) === "Cancelled";
+}
+
 export function isPostDeliveryStatus(status: ProjectStatus | string) {
   const normalized = normalizeProjectStatus(status);
   return (
@@ -137,7 +142,7 @@ export function isClosedProject(status: ProjectStatus | string) {
 }
 
 export function isActiveCommission(status: ProjectStatus | string) {
-  return !isProjectCompleted(status);
+  return !isClosedProject(status);
 }
 
 export function getIssueStatusForType(issueType: DeliveryIssueType): ProjectStatus {
@@ -182,10 +187,10 @@ export function getProductionTimelineProgress(status: ProjectStatus | string): n
   return (index / (productionProjectStatuses.length - 1)) * 100;
 }
 
-/** Index into the full designer timeline (`projectStatuses` in design-tokens). */
+/** Index into the visible production timeline. Exception states are not production steps. */
 export function getFullTimelineIndex(status: ProjectStatus | string): number {
   const normalized = normalizeProjectStatus(status);
-  const index = projectStatuses.indexOf(normalized);
+  const index = timelineProjectStatuses.indexOf(normalized as (typeof timelineProjectStatuses)[number]);
   if (index >= 0) return index;
   const productionIndex = productionProjectStatuses.indexOf(normalized as ProductionProjectStatus);
   return productionIndex >= 0 ? productionIndex : 0;
@@ -193,7 +198,7 @@ export function getFullTimelineIndex(status: ProjectStatus | string): number {
 
 export function getFullTimelineProgress(status: ProjectStatus | string): number {
   const index = getFullTimelineIndex(status);
-  return (index / (projectStatuses.length - 1)) * 100;
+  return (index / (timelineProjectStatuses.length - 1)) * 100;
 }
 
 export function getOpenDeliveryIssueForProject(

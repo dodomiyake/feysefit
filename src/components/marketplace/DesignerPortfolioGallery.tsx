@@ -17,6 +17,8 @@ interface DesignerPortfolioGalleryProps {
 export function DesignerPortfolioGallery({ designer }: DesignerPortfolioGalleryProps) {
   const { role } = useApp();
   const showCustomerCTAs = shouldShowCustomerMarketplaceCTAs(role);
+  const requestPath = `/marketplace/${designer.id}/request`;
+  const requestHref = role ? requestPath : `/login?next=${encodeURIComponent(requestPath)}`;
   const pieces = getDesignerPortfolioGallery(designer.id, designer.portfolioImages);
   const collections = useMemo(() => {
     const names = pieces
@@ -51,10 +53,10 @@ export function DesignerPortfolioGallery({ designer }: DesignerPortfolioGalleryP
           </div>
           {showCustomerCTAs && (
             <Link
-              href={`/marketplace/${designer.id}/request`}
+              href={requestHref}
               className="hidden rounded-full bg-primary px-5 py-2 text-sm font-medium text-white shadow-lg shadow-primary/20 transition-opacity hover:opacity-90 sm:inline-block"
             >
-              Request Design
+              Make an Enquiry
             </Link>
           )}
         </div>

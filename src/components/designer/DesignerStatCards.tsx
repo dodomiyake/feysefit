@@ -3,15 +3,15 @@
 import { useMemo } from "react";
 import { Users, FolderKanban, Ruler, ShoppingCart } from "lucide-react";
 import { useApp } from "@/context/AppContext";
-import { isProjectCompleted } from "@/lib/project-delivery";
+import { isActiveCommission, isProjectCompleted } from "@/lib/project-delivery";
 import { cn } from "@/lib/cn";
 
 export function DesignerStatCards() {
   const { customers, projects } = useApp();
 
   const stats = useMemo(() => {
-    const activeProjects = projects.filter((p) => !isProjectCompleted(p.status));
-    const pendingMeasurements = projects.filter((p) => p.status === "Measurements Needed");
+    const activeProjects = projects.filter((p) => isActiveCommission(p.status));
+    const pendingMeasurements = activeProjects.filter((p) => p.status === "Measurements Needed");
     const completedOrders = projects.filter((p) => isProjectCompleted(p.status));
 
     return [

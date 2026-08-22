@@ -3,6 +3,10 @@ import type { CustomerLinkState, UnlinkRequest } from "@/lib/customer-access";
 import type { Conversation } from "@/lib/conversations";
 import type { MarketplaceApproval } from "@/lib/marketplace-approvals";
 import type { Project } from "@/lib/mock-data";
+import type {
+  MarketplaceEnquiry,
+  MarketplaceEnquiryMessage,
+} from "@/lib/marketplace-enquiries";
 import type { UserReport } from "@/lib/admin-reports";
 import { getOpenReportedUsersCount } from "@/lib/admin-reports";
 import { conversationMessageHref } from "@/lib/message-links";
@@ -13,6 +17,108 @@ export interface AppNotification {
   body: string;
   href: string;
   time: string;
+}
+
+function previewEnquiryBody(text: string) {
+  const trimmed = text.trim();
+  return trimmed.length > 96 ? `${trimmed.slice(0, 96)}...` : trimmed;
+}
+
+export function buildMarketplaceEnquiryNotifications(
+  enquiries: MarketplaceEnquiry[],
+  messagesByEnquiry: Record<string, MarketplaceEnquiryMessage[]>,
+  viewerRole: "designer" | "customer"
+): AppNotification[] {
+  const notifications: Array<AppNotification & { sortAt: string }> = [];
+
+  for (const enquiry of enquiries) {
+    const messages = messagesByEnquiry[enquiry.id] ?? [];
+    const lastMessage = messages[messages.length - 1];
+    const href = `/enquiries?enquiry=${encodeURIComponent(enquiry.id)}`;
+
+    if (lastMessage && lastMessage.senderRole !== viewerRole) {
+      notifications.push({
+        id: `enquiry-message-${lastMessage.id}`,
+        title: `New enquiry reply from ${lastMessage.senderName}`,
+        body: previewEnquiryBody(lastMessage.body),
+        href,
+        time: "Recently",
+        sortAt: lastMessage.createdAt,
+      });
+    }
+
+    if (viewerRole === "designer" && enquiry.status === "pending") {
+      notifications.push({
+        id: `enquiry-new-${enquiry.id}`,
+        title: `New enquiry from ${enquiry.customerName}`,
+        body: `${enquiry.outfitType} · ${previewEnquiryBody(enquiry.description)}`,
+        href,
+        time: "New",
+        sortAt: enquiry.createdAt,
+      });
+    }
+
+    if (
+      viewerRole === "designer" &&
+      enquiry.status === "discussing" &&
+      enquiry.customerAgreedAt
+    ) {
+      notifications.push({
+        id: `enquiry-ready-${enquiry.id}-${enquiry.customerAgreedAt}`,
+        title: `${enquiry.customerName} is ready to proceed`,
+        body: "Review the latest discussion before confirming the agreement and linking the client.",
+        href,
+        time: "Action required",
+        sortAt: enquiry.customerAgreedAt,
+      });
+    }
+
+    if (viewerRole === "customer" && enquiry.status === "accepted") {
+      notifications.push({
+        id: `enquiry-accepted-${enquiry.id}-${enquiry.acceptedAt ?? enquiry.updatedAt}`,
+        title: `Agreement confirmed by ${enquiry.designerName}`,
+        body: "Your accounts are now linked. Project creation remains a separate designer action.",
+        href,
+        time: "Recently",
+        sortAt: enquiry.acceptedAt ?? enquiry.updatedAt,
+      });
+    }
+
+    if (viewerRole === "customer" && enquiry.status === "declined") {
+      notifications.push({
+        id: `enquiry-declined-${enquiry.id}-${enquiry.updatedAt}`,
+        title: `${enquiry.designerName} declined the enquiry`,
+        body: "Open the enquiry to review its final status.",
+        href,
+        time: "Recently",
+        sortAt: enquiry.updatedAt,
+      });
+    }
+
+    if (enquiry.status === "unlinked") {
+      notifications.push({
+        id: `enquiry-unlinked-${enquiry.id}-${enquiry.updatedAt}`,
+        title: "Designer link ended",
+        body:
+          viewerRole === "designer"
+            ? `${enquiry.customerName} is no longer linked to your atelier.`
+            : `Your previous agreement with ${enquiry.designerName} is now archived.`,
+        href,
+        time: "Recently",
+        sortAt: enquiry.updatedAt,
+      });
+    }
+  }
+
+  return notifications
+    .sort((a, b) => b.sortAt.localeCompare(a.sortAt))
+    .map((notification) => ({
+      id: notification.id,
+      title: notification.title,
+      body: notification.body,
+      href: notification.href,
+      time: notification.time,
+    }));
 }
 
 function previewMessageBody(text: string, hasAttachments: boolean) {
@@ -129,9 +235,9 @@ export function buildNotifications({
   if (!role) return [];
 
   if (role === "customer") {
-    const items: AppNotification[] = [
-      ...buildProjectNotifications(projects, customerId, customerName),
-    ];
+    const items: AppNotification[] = customerLink.linkedDesignerId
+      ? buildProjectNotifications(projects, customerId, customerName)
+      : [];
 
     if (customerLink.unlinkStatus === "pending") {
       items.push({

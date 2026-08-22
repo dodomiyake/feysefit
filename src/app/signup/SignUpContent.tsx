@@ -115,7 +115,8 @@ export default function SignUpContent({ role }: SignUpContentProps) {
     setTermsError(false);
     setFormError(null);
 
-    // Consume the token immediately so "Success!" cannot outlive a single-use token.
+    // Remove the token from reusable state, but reset the widget only after the
+    // Supabase request settles so the submitted token remains valid for verification.
     const captchaToken = abuse.showCaptcha ? abuse.consumeCaptchaToken() : null;
     if (abuse.showCaptcha && !captchaToken) {
       setFormError("Complete the security check to prove you are human, then try again.");

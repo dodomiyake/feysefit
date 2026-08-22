@@ -47,7 +47,12 @@ Then, in a **staging** SQL editor, entire files from line 1:
 1. Optional read-only check: `supabase/tests/staging-preflight.sql`
 2. If the first hardening pass is not on this project, apply those four files.
 3. `supabase/patch-security-audit-followup.sql` (additive follow-up from the second audit)
-4. `supabase/patch-security-audit-followup-2.sql` (account-activity EXECUTE, database cleanup, public-image INSERT revoke). This file **raises** if `app_private` or `consume_rate_limit_server` from follow-up 1 are missing. Quarantine objects are deleted through the Storage API endpoint, never direct SQL.\n5. `supabase/patch-security-audit-followup-3.sql` (authenticated-only helper policies and anonymous marketplace reads).\n6. `supabase/patch-security-audit-followup-4.sql` (routes designer ownership policies through `current_designer_profile_id()` without restoring private `designer_profiles.user_id` access).
+4. `supabase/patch-security-audit-followup-2.sql` (account-activity EXECUTE, database cleanup, public-image INSERT revoke). This file **raises** if `app_private` or `consume_rate_limit_server` from follow-up 1 are missing. Quarantine objects are deleted through the Storage API endpoint, never direct SQL.
+5. `supabase/patch-security-audit-followup-3.sql` (authenticated-only helper policies and anonymous marketplace reads).
+6. `supabase/patch-security-audit-followup-4.sql` (routes designer ownership policies through `current_designer_profile_id()` without restoring private `designer_profiles.user_id` access).
+7. `supabase/patch-marketplace-enquiries.sql` (pending enquiry records, pair-scoped linking, and atomic project creation).
+8. `supabase/patch-marketplace-enquiry-conversations.sql` (designer acceptance-for-discussion, participant-only pre-link replies, client agreement confirmation, and explicit designer finalisation). Deploy the matching application in the same release; accepting for discussion or replying cannot create a relationship, and the legacy immediate-link RPC remains revoked.
+9. `supabase/patch-marketplace-enquiry-live-unlink.sql` (live enquiry/message notifications and automatic accepted → unlinked archival when the relationship ends).
 
 Limiter for the application is now:
 
@@ -61,8 +66,12 @@ select to_regprocedure('public.consume_rate_limit_server(text,text)');
 
 1. `supabase/tests/security-hardening.sql` (staging only; ends in `ROLLBACK`)
 2. `supabase/tests/security-audit-followup.sql` (staging only; ends in `ROLLBACK`)
-3. `supabase/tests/security-audit-followup-2.sql` (staging only; ends in `ROLLBACK`)\n4. `supabase/tests/security-audit-followup-3.sql` (staging only; ends in `ROLLBACK`)\n5. Counts-only unscoped inventory: `supabase/tests/unscoped-storage-inventory.sql` (no filenames)
-5. Grant boundary — all five must be `false`:
+3. `supabase/tests/security-audit-followup-2.sql` (staging only; ends in `ROLLBACK`)
+4. `supabase/tests/security-audit-followup-3.sql` (staging only; ends in `ROLLBACK`)
+5. `supabase/tests/security-audit-followup-4.sql` (staging only; ends in `ROLLBACK`)
+6. `supabase/tests/marketplace-enquiries.sql` (staging only; ends in `ROLLBACK`)
+7. Counts-only unscoped inventory: `supabase/tests/unscoped-storage-inventory.sql` (no filenames)
+8. Grant boundary — all five must be `false`:
 
 ```sql
 select
@@ -81,18 +90,24 @@ select
   ) as authenticated_admin_notes;
 ```
 
-4. Integrity columns — authenticated `UPDATE` on `rating`, `review_count`, and `marketplace_live` must be false.
-5. Views — `is_updatable` / `is_insertable_into` = `NO`. `marketplace_testimonials` must be `security_invoker=true`.
-6. Direct anon `EXECUTE` of `consume_rate_limit`, `log_security_event`, `log_account_activity`, and `lookup_invite_code` must fail.
-7. `can_read_private_storage_object` is a function: check `EXECUTE`, not `SELECT`.
-8. Enable `pg_cron` in staging if the follow-up 2 notice said it was skipped, then re-apply follow-up 2 so cleanup jobs register.
+9. Integrity columns — authenticated `UPDATE` on `rating`, `review_count`, and `marketplace_live` must be false.
+10. Views — `is_updatable` / `is_insertable_into` = `NO`. `marketplace_testimonials` must be `security_invoker=true`.
+11. Direct anon `EXECUTE` of `consume_rate_limit`, `log_security_event`, `log_account_activity`, and `lookup_invite_code` must fail.
+12. `can_read_private_storage_object` is a function: check `EXECUTE`, not `SELECT`.
+13. Enable `pg_cron` in staging if the follow-up 2 notice said it was skipped, then re-apply follow-up 2 so cleanup jobs register.
 
-## Application deploy (step 7)
+## Application deploy (step 8)
 
 Deploy from `security/hardening-pass` only after step 2 created
 `consume_rate_limit_server` and `log_account_activity_server`, and the HMAC / cookie secrets are set. Coordinate `/auth/uploads/promote` with the public-image INSERT revocation.
 
 ## Rollback order (reverse)
+
+For the enquiry release, stop the matching application deploy first, then run
+`supabase/rollback-marketplace-enquiry-live-unlink.sql`,
+`supabase/rollback-marketplace-enquiry-conversations.sql`, followed by
+`supabase/rollback-marketplace-enquiries.sql`. The rollback deliberately does
+not restore browser relationship writes or the legacy immediate-link RPC.
 
 If follow-up 2 was applied and the matching application was **not** deployed:
 
@@ -130,4 +145,3 @@ Follow-up 2 registers `pg_cron` jobs when the extension exists. Absence of `pg_c
 Quarantine cleanup is intentionally **not** a SQL cron job. Hosted Supabase blocks direct deletion from `storage.objects`. Schedule `POST /auth/uploads/cleanup-quarantine` with `CRON_SECRET` so deletion runs through the Storage API. See `docs/security/storage-uploads.md`.
 
 If `pg_cron` is not enabled, those SQL jobs are skipped and must be scheduled after the extension is turned on. See also `docs/security/turnstile-gothrue.md` and `docs/security/jspdf-dompurify.md`.
-

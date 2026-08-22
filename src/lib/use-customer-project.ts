@@ -2,17 +2,19 @@
 
 import type { Project } from "@/lib/mock-data";
 import { useApp } from "@/context/AppContext";
-import { isProjectCompleted } from "@/lib/project-delivery";
+import { isActiveCommission } from "@/lib/project-delivery";
 
 function pickActiveProject(candidates: Project[]): Project | null {
-  if (!candidates.length) return null;
-  const sorted = [...candidates].sort((a, b) => {
+  const active = candidates.filter((project) => isActiveCommission(project.status));
+  if (!active.length) return null;
+
+  const sorted = [...active].sort((a, b) => {
     const aTime = a.updatedAt ?? a.createdAt ?? "";
     const bTime = b.updatedAt ?? b.createdAt ?? "";
     return bTime.localeCompare(aTime);
   });
-  const inProgress = sorted.filter((p) => !isProjectCompleted(p.status));
-  return (inProgress.length ? inProgress : sorted)[0] ?? null;
+
+  return sorted[0] ?? null;
 }
 
 export function useCustomerActiveProject(): Project | null {

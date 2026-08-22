@@ -16,7 +16,6 @@ import { isSupabaseEnabled } from "@/lib/config/backend";
 import {
   listConversations,
   sendProjectMessage,
-  getOrCreateDesignerConversation,
 } from "@/lib/services/messageService";
 import { api, isApiEnabled } from "@/lib/api/client";
 import { useApp } from "@/context/AppContext";
@@ -53,17 +52,7 @@ export function MessagesWorkspace() {
     if (!useSupabase && !useApi) return;
     try {
       if (useSupabase) {
-        if (designerId) {
-          const thread = await getOrCreateDesignerConversation(
-            designerId,
-            authUser?.name ?? "You"
-          );
-          const list = await listConversations(authUser);
-          const merged = list.some((c) => c.id === thread.id) ? list : [thread, ...list];
-          setApiConversations(merged);
-        } else {
-          setApiConversations(await listConversations(authUser));
-        }
+        setApiConversations(await listConversations(authUser));
       } else if (designerId) {
         const thread = await api.conversations.createDesignerThread(designerId);
         const list = await api.conversations.list({
@@ -101,16 +90,7 @@ export function MessagesWorkspace() {
       try {
         let next: Conversation[] = [];
         if (useSupabase) {
-          if (designerId) {
-            const thread = await getOrCreateDesignerConversation(
-              designerId,
-              authUser?.name ?? "You"
-            );
-            const list = await listConversations(authUser);
-            next = list.some((c) => c.id === thread.id) ? list : [thread, ...list];
-          } else {
-            next = await listConversations(authUser);
-          }
+          next = await listConversations(authUser);
         } else if (designerId) {
           const thread = await api.conversations.createDesignerThread(designerId);
           const list = await api.conversations.list({

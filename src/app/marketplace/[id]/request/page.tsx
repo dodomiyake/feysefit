@@ -15,16 +15,8 @@ import { CommissionDefaultsPreview } from "@/components/ui/PaletteSwatches";
 import { Badge } from "@/components/ui/Badge";
 import { MarketplaceGate } from "@/components/customer/MarketplaceGate";
 import { useApp } from "@/context/AppContext";
-import { isLocalDemoMode, isSupabaseEnabled } from "@/lib/config/backend";
-import {
-  buildMarketplaceRequestMessage,
-  resolveMarketplaceOutfitLabel,
-  submitMarketplaceDesignRequest,
-} from "@/lib/services/marketplaceService";
-import {
-  messageThreadWithDraft,
-  projectMessageThreadHref,
-} from "@/lib/message-links";
+import { isSupabaseEnabled } from "@/lib/config/backend";
+import { createMarketplaceEnquiry } from "@/lib/services/marketplaceEnquiryService";
 import { projectOutfitTypes } from "@/lib/project-outfit-types";
 import { Loader2, MapPin, Star } from "lucide-react";
 
@@ -39,11 +31,9 @@ export default function RequestDesignPage({
     canAccessMarketplace,
     isDesignerMarketplaceLive,
     showToast,
-    linkCustomerToDesigner,
     getDesignerById,
     authUser,
     role,
-    refreshAppData,
   } = useApp();
   const designer = getDesignerById(id);
   const useSupabase = isSupabaseEnabled();
@@ -58,6 +48,7 @@ export default function RequestDesignPage({
     const description = String(form.get("description") ?? "").trim();
     const budget = String(form.get("budget") ?? "").trim();
     const deadline = String(form.get("deadline") ?? "").trim();
+    const consultationPreference = String(form.get("consultation") ?? "").trim();
 
     if (!outfitType) {
       showToast("Select an outfit type.", "error");
@@ -70,45 +61,24 @@ export default function RequestDesignPage({
 
     setSubmitting(true);
     try {
-      const outfitLabel = resolveMarketplaceOutfitLabel(outfitType);
-      const message = buildMarketplaceRequestMessage({
-        designerFirstName: designer.designerName.split(" ")[0],
-        outfitLabel,
-        description,
-        budget,
-        deadline,
-      });
-
-      if (useSupabase) {
-        if (!authUser?.customerId) {
-          throw new Error("Sign in as a client to send a design request.");
-        }
-
-        const { projectId } = await submitMarketplaceDesignRequest({
-          designerLegacyId: designer.id,
-          designerDisplayName: designer.businessName,
-          customerLegacyId: authUser.customerId,
-          customerName: authUser.name,
-          customerUserId: authUser.id,
-          outfitType,
-          description,
-          budget,
-          deadline,
-        });
-
-        await refreshAppData();
-        showToast(
-          `Design request sent to ${designer.businessName}. You're now linked privately.`
-        );
-        router.push(projectMessageThreadHref(projectId));
-        return;
+      if (!useSupabase) {
+        throw new Error("Connect Supabase to send marketplace enquiries.");
+      }
+      if (!authUser?.customerId) {
+        throw new Error("Sign in as a client to send an enquiry.");
       }
 
-      linkCustomerToDesigner(designer.id, { source: "marketplace" });
-      showToast(
-        `Design request sent to ${designer.businessName}. You're now linked privately.`
-      );
-      router.push(messageThreadWithDraft(`designer-${designer.id}`, message));
+      await createMarketplaceEnquiry({
+        designerLegacyId: designer.id,
+        outfitType,
+        description,
+        budget,
+        preferredDeadline: deadline,
+        consultationPreference,
+      });
+
+      showToast(`Enquiry sent to ${designer.businessName}. No private access is shared yet.`);
+      router.push("/enquiries");
     } catch (error) {
       showToast(
         error instanceof Error ? error.message : "Could not send design request.",
@@ -172,8 +142,8 @@ export default function RequestDesignPage({
           Request a design
         </h1>
         <p className="mt-2 text-sm text-primary/60">
-          Send a commission enquiry to {designer.businessName}. We&apos;ll create a project and
-          open a secure chat with your request details.
+          Send a private commission enquiry to {designer.businessName}. You will become linked
+          only if the designer accepts. No measurements, files, or private details are shared yet.
         </p>
 
         <Link
@@ -228,6 +198,17 @@ export default function RequestDesignPage({
             placeholder="e.g. £800 – £1,200"
           />
           <Input label="Preferred deadline (optional)" id="deadline" name="deadline" type="date" />
+          <Select
+            label="Consultation preference (optional)"
+            id="consultation"
+            name="consultation"
+            options={[
+              { value: "", label: "No preference" },
+              { value: "studio", label: "Studio appointment" },
+              { value: "video", label: "Video consultation" },
+              { value: "either", label: "Either works for me" },
+            ]}
+          />
 
           <CommissionDefaultsPreview />
 
@@ -238,14 +219,12 @@ export default function RequestDesignPage({
                 Sending request…
               </span>
             ) : (
-              "Send request"
+              "Send enquiry"
             )}
           </Button>
-          {isLocalDemoMode() && (
-            <p className="text-center text-xs text-primary/50">
-              Demo mode sends your request as a draft message. Supabase creates a full project.
-            </p>
-          )}
+          <p className="text-center text-xs leading-relaxed text-primary/50">
+            Pending enquiries expire after 14 days. You can keep up to three enquiries open at a time.
+          </p>
         </form>
       </div>
     </AppShell>
