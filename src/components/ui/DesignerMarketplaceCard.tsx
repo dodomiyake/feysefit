@@ -69,15 +69,22 @@ export function DesignerMarketplaceCard({ designer }: { designer: Designer }) {
         </div>
 
         {showCustomerCTAs ? (
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Link href={requestHref} className="flex-1 lg:order-2">
-              <Button size="sm" className="w-full">
-                Make an Enquiry
+          <div className="grid grid-cols-2 gap-2">
+            <Link href={profileHref}>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="w-full whitespace-nowrap rounded-xl bg-background/50 px-3 text-[13px] shadow-none"
+              >
+                View Profile
               </Button>
             </Link>
-            <Link href={profileHref} className="flex-1 lg:order-1">
-              <Button variant="secondary" size="sm" className="w-full bg-background/50">
-                View Profile
+            <Link href={requestHref}>
+              <Button
+                size="sm"
+                className="w-full whitespace-nowrap rounded-xl bg-primary px-3 text-[13px] text-background shadow-sm hover:bg-primary/90"
+              >
+                Start Enquiry
               </Button>
             </Link>
           </div>
