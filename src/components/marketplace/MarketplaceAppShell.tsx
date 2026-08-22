@@ -27,25 +27,25 @@ export function MarketplaceAppShell({
 
   if (!role) {
     return (
-      <>
+      <div className="flex min-h-screen flex-col">
         <PublicMarketplaceHeader />
-        <main className="min-h-screen pb-8">
+        <main className="flex-1 pb-8">
           <SessionIdleGuard />
           <AuthRouteGuard>{children}</AuthRouteGuard>
         </main>
         <PublicMarketplaceFooter />
         <Toast />
-      </>
+      </div>
     );
   }
 
   return (
     <AppShell showMobileTopBar={false}>
       {showSignedInTopBar && <TopBar title={title} showBack backHref={backHref} />}
-      <main className="flex min-h-[calc(100vh-4rem)] flex-col">
-        <div className="flex-1">{children}</div>
+      <div className="flex min-h-[calc(100vh-4rem)] flex-col">
+        <main className="flex-1">{children}</main>
         <PublicMarketplaceFooter />
-      </main>
+      </div>
     </AppShell>
   );
 }
