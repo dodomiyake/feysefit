@@ -116,6 +116,10 @@ export function isProjectCompleted(status: ProjectStatus | string) {
   return normalizeProjectStatus(status) === "Completed";
 }
 
+export function isProjectCancelled(status: ProjectStatus | string) {
+  return normalizeProjectStatus(status) === "Cancelled";
+}
+
 export function isPostDeliveryStatus(status: ProjectStatus | string) {
   const normalized = normalizeProjectStatus(status);
   return (
@@ -137,7 +141,7 @@ export function isClosedProject(status: ProjectStatus | string) {
 }
 
 export function isActiveCommission(status: ProjectStatus | string) {
-  return !isProjectCompleted(status);
+  return !isClosedProject(status);
 }
 
 export function getIssueStatusForType(issueType: DeliveryIssueType): ProjectStatus {
