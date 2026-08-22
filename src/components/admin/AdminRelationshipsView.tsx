@@ -20,10 +20,16 @@ type RegistrationFilter = "all" | "invited" | "direct";
 
 const defaultDateRange: DateRangeFilter = { preset: "all" };
 
+function getRelationshipStatusLabel(row: AdminRelationship) {
+  if (row.awaitingDesigner) return "Awaiting designer";
+  if (row.isActive) return "Active";
+  return "Ended / unlinked";
+}
+
 export function AdminRelationshipsView() {
   const { relationships, loading, error } = useAdminRelationships();
   const [query, setQuery] = useState("");
-  const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
+  const [activeFilter, setActiveFilter] = useState<ActiveFilter>("active");
   const [registrationFilter, setRegistrationFilter] = useState<RegistrationFilter>("all");
   const [dateRange, setDateRange] = useState<DateRangeFilter>(defaultDateRange);
 
@@ -36,7 +42,7 @@ export function AdminRelationshipsView() {
       if (!isDateInRange(row.createdAt, dateRange)) return false;
       if (!normalized) return true;
       const haystack =
-        `${row.designerName} ${row.customerName} ${row.registrationType}`.toLowerCase();
+        `${row.designerName} ${row.customerName} ${row.registrationType} ${getRelationshipStatusLabel(row)}`.toLowerCase();
       return haystack.includes(normalized);
     });
   }, [relationships, query, activeFilter, registrationFilter, dateRange]);
@@ -47,8 +53,7 @@ export function AdminRelationshipsView() {
     { header: "Registration", value: (row: AdminRelationship) => row.registrationType },
     {
       header: "Status",
-      value: (row: AdminRelationship) =>
-        row.awaitingDesigner ? "Awaiting designer" : row.isActive ? "Active" : "Inactive",
+      value: (row: AdminRelationship) => getRelationshipStatusLabel(row),
     },
     { header: "Projects", value: (row: AdminRelationship) => row.projectCount },
     { header: "Linked", value: (row: AdminRelationship) => row.createdAt },
@@ -84,9 +89,9 @@ export function AdminRelationshipsView() {
         <Select
           label="Link status"
           options={[
-            { value: "all", label: "All links" },
-            { value: "active", label: "Active only" },
-            { value: "inactive", label: "Inactive only" },
+            { value: "active", label: "Current links" },
+            { value: "inactive", label: "Ended / unlinked" },
+            { value: "all", label: "All history" },
           ]}
           value={activeFilter}
           onChange={(event) => setActiveFilter(event.target.value as ActiveFilter)}
@@ -145,11 +150,7 @@ export function AdminRelationshipsView() {
                   <td className="p-4 capitalize text-primary/70">{row.registrationType}</td>
                   <td className="p-4">
                     <Badge variant={row.awaitingDesigner || row.isActive ? "gold" : "outline"}>
-                      {row.awaitingDesigner
-                        ? "Awaiting designer"
-                        : row.isActive
-                          ? "Active"
-                          : "Inactive"}
+                      {getRelationshipStatusLabel(row)}
                     </Badge>
                   </td>
                   <td className="p-4 text-primary/70">{row.projectCount}</td>
@@ -168,7 +169,7 @@ export function AdminRelationshipsView() {
       </div>
 
       <p className="text-xs text-primary/45">
-        Showing {filtered.length} of {relationships.length} client links
+        Showing {filtered.length} of {relationships.length} relationship records. Ended links are kept only as history.
       </p>
     </div>
   );
