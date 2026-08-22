@@ -32,6 +32,19 @@ export function formatAdminActivityTime(date: Date) {
   return formatRelativeTime(date);
 }
 
+function formatUnlinkActivitySummary(request: UnlinkRequest) {
+  if (request.status === "approved" && request.adminNotes?.toLowerCase().includes("auto-approved")) {
+    return `From ${request.designerName} · auto-approved, no active project`;
+  }
+  if (request.status === "approved") {
+    return `From ${request.designerName} · approved`;
+  }
+  if (request.status === "declined") {
+    return `From ${request.designerName} · declined`;
+  }
+  return `From ${request.designerName} · ${request.status.replace(/_/g, " ")}`;
+}
+
 export function buildAdminActivityFeed(input: {
   projects: Project[];
   marketplaceApprovals: MarketplaceApproval[];
@@ -68,12 +81,12 @@ export function buildAdminActivityFeed(input: {
   }
 
   for (const request of input.unlinkRequests) {
-    if (request.status !== "pending" && request.status !== "designer_review") continue;
+    if (request.status === "none") continue;
     items.push({
       id: `unlink-${request.id}`,
       type: "unlink",
       title: `${request.customerName} → unlink`,
-      summary: `From ${request.designerName} · ${request.status.replace(/_/g, " ")}`,
+      summary: formatUnlinkActivitySummary(request),
       href: "/dashboard/admin/unlink-requests",
       timestamp: parseDisplayDate(request.submittedAt),
     });
