@@ -49,6 +49,12 @@ export function saveProjects(projects: Project[]) {
   }
 }
 
+export function deleteProjectFromStore(projectId: string): Project[] {
+  const updated = readProjectsFromStorage().filter((project) => project.id !== projectId);
+  saveProjects(updated);
+  return updated;
+}
+
 export function updateProjectStatusInStore(
   projectId: string,
   status: ProjectStatus
