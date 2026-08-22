@@ -3,7 +3,7 @@
 import { Check, Circle, Package, Truck, AlertCircle, Wrench, RotateCcw } from "lucide-react";
 import type { Project } from "@/lib/mock-data";
 import { ProjectStatusSelect } from "@/components/designer/ProjectStatusSelect";
-import { projectStatuses, type ProjectStatus } from "@/lib/design-tokens";
+import { timelineProjectStatuses, type ProjectStatus } from "@/lib/design-tokens";
 import {
   getProjectStatusIndex,
 } from "@/lib/project-timeline";
@@ -89,7 +89,7 @@ export function ProductionTimeline({ project, details, isDesigner }: ProductionT
           />
         </div>
         <ol className="grid grid-cols-2 gap-3 sm:flex sm:justify-between sm:gap-1">
-          {projectStatuses.map((status, index) => {
+          {timelineProjectStatuses.map((status, index) => {
             const isComplete = index < currentIndex;
             const isCurrent = index === currentIndex;
             const isUpcoming = index > currentIndex;
