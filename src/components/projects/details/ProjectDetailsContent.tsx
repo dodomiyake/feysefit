@@ -18,12 +18,14 @@ import { ProjectDeliveryIssuePanel } from "@/components/projects/details/Project
 import { ProjectLocalOpsCards } from "@/components/projects/details/ProjectLocalOpsCards";
 import { ProjectLocalOpsSummary } from "@/components/projects/details/ProjectLocalOpsSummary";
 import { ProjectItemsCard } from "@/components/projects/details/ProjectItemsCard";
+import { StatusPill } from "@/components/ui/StatusPill";
 import { hasVisibleLocalOps } from "@/lib/local-customer";
 import {
   hasProjectDescription,
   ProjectDescriptionCard,
 } from "@/components/projects/details/ProjectDescriptionCard";
 import { resolveProjectDetails } from "@/lib/project-details";
+import { isProjectCancelled } from "@/lib/project-delivery";
 import type { Project } from "@/lib/mock-data";
 
 interface ProjectDetailsContentProps {
@@ -33,6 +35,41 @@ interface ProjectDetailsContentProps {
   isAdmin?: boolean;
   backHref?: string;
   backLabel?: string;
+}
+
+function CancelledProjectClearedState({
+  project,
+  backHref,
+  backLabel,
+}: {
+  project: Project;
+  backHref: string;
+  backLabel: string;
+}) {
+  return (
+    <div className="mx-auto max-w-4xl px-5 pb-8 pt-6 lg:px-16 lg:pb-10 lg:pt-8">
+      <DesktopBackNav href={backHref} label={backLabel} />
+      <div className="rounded-2xl border border-primary/10 bg-surface-container p-8 text-center shadow-sm lg:p-12">
+        <div className="mb-4 flex justify-center">
+          <StatusPill status={project.status} />
+        </div>
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-accent">
+          Project cleared
+        </p>
+        <h1 className="mt-3 font-headline text-2xl font-bold text-primary lg:text-4xl">
+          This project has been cancelled
+        </h1>
+        <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-primary/65 lg:text-base">
+          {project.title} is no longer an active commission. The production workspace,
+          timeline, delivery tools, messages, measurements and progress actions have been cleared
+          from the live project view for both client and designer.
+        </p>
+        <p className="mt-5 text-xs text-primary/45">
+          Project code: {project.projectCode}
+        </p>
+      </div>
+    </div>
+  );
 }
 
 export function ProjectDetailsContent({
@@ -48,6 +85,16 @@ export function ProjectDetailsContent({
   const canManageProject = isDesigner;
   const hasReferences = (project.customerReferences?.length ?? 0) > 0;
   const hasTeam = details.teamMembers.length > 0;
+
+  if (!isAdmin && isProjectCancelled(project.status)) {
+    return (
+      <CancelledProjectClearedState
+        project={project}
+        backHref={backHref}
+        backLabel={backLabel}
+      />
+    );
+  }
 
   return (
     <div className="mx-auto max-w-7xl px-5 pb-8 pt-6 lg:px-16 lg:pb-10 lg:pt-8">
