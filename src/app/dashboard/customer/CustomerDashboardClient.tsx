@@ -202,11 +202,27 @@ export default function CustomerDashboardClient() {
             </div>
           </>
         ) : isLinkedCustomer(customerLink) && designer ? (
-          <EmptyState
-            icon={FolderOpen}
-            title="No active project"
-            description="Once your designer creates a project for you, you'll see progress and updates here."
-          />
+          <div className="space-y-4">
+            <EmptyState
+              icon={FolderOpen}
+              title="No active project"
+              description="Your designer has not created an active project yet. You can keep discussing the enquiry, or end this designer relationship if you are not moving ahead."
+            />
+            <div className="rounded-xl border border-primary/10 bg-card p-5 shadow-warm sm:flex sm:items-center sm:justify-between sm:gap-4">
+              <div>
+                <p className="text-sm font-semibold text-primary">No project is holding this relationship open</p>
+                <p className="mt-1 text-xs leading-relaxed text-primary/60">
+                  Because there is no active project with {designer.businessName}, you can unlink without waiting for the designer to cancel anything.
+                </p>
+              </div>
+              <Link
+                href="/settings#unlink"
+                className="mt-4 inline-flex w-full items-center justify-center rounded-full bg-zinc-900 px-5 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-zinc-800 sm:mt-0 sm:w-auto"
+              >
+                End relationship
+              </Link>
+            </div>
+          </div>
         ) : (
           <EmptyState
             icon={FolderOpen}
