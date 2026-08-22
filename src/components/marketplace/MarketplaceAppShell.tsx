@@ -42,7 +42,10 @@ export function MarketplaceAppShell({
   return (
     <AppShell showMobileTopBar={false}>
       {showSignedInTopBar && <TopBar title={title} showBack backHref={backHref} />}
-      {children}
+      <main className="flex min-h-[calc(100vh-4rem)] flex-col">
+        <div className="flex-1">{children}</div>
+        <PublicMarketplaceFooter />
+      </main>
     </AppShell>
   );
 }
