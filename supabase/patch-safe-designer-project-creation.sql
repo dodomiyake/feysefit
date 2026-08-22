@@ -1,3 +1,6 @@
+drop function if exists public.create_designer_project(uuid, uuid, text, text, text, text, text, text, text[], jsonb);
+drop function if exists public.create_designer_project(uuid, uuid, text, text, text, text, text, text, jsonb, jsonb);
+
 create or replace function public.create_designer_project(
   p_designer_id uuid,
   p_customer_id uuid,
@@ -7,7 +10,7 @@ create or replace function public.create_designer_project(
   p_deadline text,
   p_budget text,
   p_description text default '',
-  p_reference_images text[] default '{}'::text[],
+  p_reference_images jsonb default '[]'::jsonb,
   p_items jsonb default '[]'::jsonb
 )
 returns uuid
@@ -22,7 +25,8 @@ declare
   v_item jsonb;
   v_index integer := 0;
   v_item_status project_status;
-  v_reference_images text[];
+  v_item_reference_images jsonb;
+  v_reference_images jsonb;
 begin
   if auth.uid() is null then
     raise exception 'Sign in again to create a project.' using errcode = 'P0001';
@@ -46,6 +50,12 @@ begin
   ) then
     raise exception 'You can only create projects for clients who have an active relationship with your atelier.' using errcode = 'P0001';
   end if;
+
+  v_reference_images := case
+    when jsonb_typeof(coalesce(p_reference_images, '[]'::jsonb)) = 'array'
+      then coalesce(p_reference_images, '[]'::jsonb)
+    else '[]'::jsonb
+  end;
 
   v_code := 'FF-' || right(floor(extract(epoch from v_now) * 1000)::bigint::text, 6);
 
@@ -81,7 +91,7 @@ begin
     coalesce(p_budget, ''),
     coalesce(trim(p_description), ''),
     'Enquiry'::project_status,
-    coalesce(p_reference_images, '{}'::text[]),
+    v_reference_images,
     '',
     null,
     null,
@@ -94,13 +104,10 @@ begin
   if jsonb_typeof(coalesce(p_items, '[]'::jsonb)) = 'array' then
     for v_item in select value from jsonb_array_elements(coalesce(p_items, '[]'::jsonb)) loop
       v_item_status := coalesce(nullif(v_item->>'status', '')::project_status, 'Enquiry'::project_status);
-      if jsonb_typeof(v_item->'referenceImages') = 'array' then
-        select coalesce(array_agg(value), '{}'::text[])
-        into v_reference_images
-        from jsonb_array_elements_text(v_item->'referenceImages') as t(value);
-      else
-        v_reference_images := '{}'::text[];
-      end if;
+      v_item_reference_images := case
+        when jsonb_typeof(v_item->'referenceImages') = 'array' then v_item->'referenceImages'
+        else '[]'::jsonb
+      end;
 
       insert into public.project_items (
         project_id,
@@ -131,7 +138,7 @@ begin
         coalesce(v_item->>'primaryFabric', ''),
         coalesce(v_item->>'secondaryMaterial', ''),
         coalesce(v_item->>'lining', ''),
-        v_reference_images,
+        v_item_reference_images,
         coalesce(v_item->>'internalNotes', ''),
         case
           when jsonb_typeof(v_item->'measurements') = 'object' then v_item->'measurements'
@@ -149,6 +156,6 @@ begin
 end;
 $$;
 
-revoke all on function public.create_designer_project(uuid, uuid, text, text, text, text, text, text, text[], jsonb) from public;
-revoke all on function public.create_designer_project(uuid, uuid, text, text, text, text, text, text, text[], jsonb) from anon;
-grant execute on function public.create_designer_project(uuid, uuid, text, text, text, text, text, text, text[], jsonb) to authenticated;
+revoke all on function public.create_designer_project(uuid, uuid, text, text, text, text, text, text, jsonb, jsonb) from public;
+revoke all on function public.create_designer_project(uuid, uuid, text, text, text, text, text, text, jsonb, jsonb) from anon;
+grant execute on function public.create_designer_project(uuid, uuid, text, text, text, text, text, text, jsonb, jsonb) to authenticated;
