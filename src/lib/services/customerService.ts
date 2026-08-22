@@ -32,6 +32,19 @@ async function fetchProjectCountForCustomer(customerProfileId: string): Promise<
   return count ?? 0;
 }
 
+function emptyCustomerLinkState(registrationType: CustomerLinkState["registrationType"] = null): CustomerLinkState {
+  return {
+    linkedDesignerId: null,
+    linkedDesignerName: null,
+    hasConcludedProject: false,
+    unlinkStatus: "none",
+    unlinkReason: null,
+    unlinkSubmittedAt: null,
+    activeUnlinkRequestId: null,
+    registrationType,
+  };
+}
+
 export async function listCustomers(): Promise<Customer[]> {
   const supabase = createClient();
   const [{ data, error }, projectCounts] = await Promise.all([
@@ -78,18 +91,7 @@ export async function getCustomerLinkState(customerProfileId: string): Promise<C
     .or(legacyOrIdFilter(customerProfileId))
     .maybeSingle();
   if (error) throw new Error(error.message);
-  if (!customer) {
-    return {
-      linkedDesignerId: null,
-      linkedDesignerName: null,
-      hasConcludedProject: false,
-      unlinkStatus: "none",
-      unlinkReason: null,
-      unlinkSubmittedAt: null,
-      activeUnlinkRequestId: null,
-      registrationType: null,
-    };
-  }
+  if (!customer) return emptyCustomerLinkState();
 
   const { data: relationship } = await supabase
     .from("designer_customer_relationships")
@@ -99,9 +101,6 @@ export async function getCustomerLinkState(customerProfileId: string): Promise<C
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-
-  // Do not auto-deactivate here — that races with marketplace re-link.
-  // Approved+still-linked rows are healed by SQL patch / admin approve RPC.
 
   let designer = null;
   if (relationship?.designer_id) {
@@ -113,7 +112,64 @@ export async function getCustomerLinkState(customerProfileId: string): Promise<C
     designer = data;
   }
 
-  return mapCustomerLink(customer, designer);
+  const base = mapCustomerLink(customer, designer);
+
+  if (!relationship?.designer_id) {
+    const { data: approvedRequest } = await supabase
+      .from("unlink_requests")
+      .select("id, status")
+      .eq("customer_id", customer.id)
+      .eq("status", "approved")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (approvedRequest) {
+      return {
+        ...base,
+        unlinkStatus: "approved",
+        unlinkReason: null,
+        unlinkSubmittedAt: null,
+        activeUnlinkRequestId: approvedRequest.id,
+      };
+    }
+
+    return {
+      ...base,
+      unlinkStatus: "none",
+      unlinkReason: null,
+      unlinkSubmittedAt: null,
+      activeUnlinkRequestId: null,
+    };
+  }
+
+  const { data: openRequest } = await supabase
+    .from("unlink_requests")
+    .select("id, status, reason, submitted_at")
+    .eq("customer_id", customer.id)
+    .eq("designer_id", relationship.designer_id)
+    .in("status", ["pending", "designer_review"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (openRequest) {
+    return {
+      ...base,
+      unlinkStatus: openRequest.status as CustomerLinkState["unlinkStatus"],
+      unlinkReason: openRequest.reason,
+      unlinkSubmittedAt: openRequest.submitted_at,
+      activeUnlinkRequestId: openRequest.id,
+    };
+  }
+
+  return {
+    ...base,
+    unlinkStatus: "none",
+    unlinkReason: null,
+    unlinkSubmittedAt: null,
+    activeUnlinkRequestId: null,
+  };
 }
 
 export async function patchCustomerLink(
