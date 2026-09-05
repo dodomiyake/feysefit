@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient, isServiceRoleConfigured } from "@/lib/supabase/admin";
 import { NextResponse, type NextRequest } from "next/server";
 import { processPublicImage, UploadValidationError } from "@/lib/security/image-process";
+import { scanForMalware } from "@/lib/security/malware-scan";
 import { runSensitiveHttpAction } from "@/lib/security/rate-limit";
 import { STORAGE_BUCKETS, MAX_STORAGE_IMAGE_BYTES, type StorageBucket } from "@/lib/storage/buckets";
 import { buildOwnedObjectPath } from "@/lib/storage/storage-url";
@@ -88,6 +89,21 @@ export async function POST(request: NextRequest) {
 
   const gated = await runSensitiveHttpAction("designRequest", user.id, async () => {
     const bytes = new Uint8Array(await file.arrayBuffer());
+
+    const scan = await scanForMalware(bytes);
+    if (scan.status === "infected") {
+      console.error(
+        JSON.stringify({ type: "upload_malware_detected", requestId, signature: scan.signature })
+      );
+      return { ok: false as const, status: 400 as const, error: "malware_detected" };
+    }
+    if (scan.status === "unavailable") {
+      console.error(
+        JSON.stringify({ type: "upload_scan_unavailable", requestId, reason: scan.reason })
+      );
+      return { ok: false as const, status: 503 as const, error: "scan_unavailable" };
+    }
+
     let processed;
     try {
       processed = await processPublicImage(bytes);

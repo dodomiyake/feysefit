@@ -48,6 +48,16 @@ export function getServiceRoleKey(): string | null {
   return readSecret("SUPABASE_SERVICE_ROLE_KEY");
 }
 
+/** URL of the ClamAV scan proxy (services/clamav-proxy). Unset disables scanning. */
+export function getClamavScanUrl(): string | null {
+  return readSecret("CLAMAV_SCAN_URL");
+}
+
+/** Server-only bearer token for the ClamAV scan proxy. Never NEXT_PUBLIC_*. */
+export function getClamavScanToken(): string | null {
+  return readSecret("CLAMAV_SCAN_TOKEN");
+}
+
 export function missingServerSecret(name: string): Error {
   return new Error(`${name} is not configured`);
 }

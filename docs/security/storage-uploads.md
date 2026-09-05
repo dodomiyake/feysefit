@@ -6,6 +6,7 @@
 - GIF is not accepted. Allowed image types are JPEG, PNG, and WebP.
 - Public and project images go through `POST /auth/uploads/promote`:
   - authenticated session required
+  - malware scan via `scanForMalware()` when `CLAMAV_SCAN_URL`/`CLAMAV_SCAN_TOKEN` are configured (see `docs/security/malware-scanning.md`) — fails the upload closed (503) if the scan is configured but unreachable, rather than silently skipping it
   - server-side magic-byte check
   - `sharp` decode/re-encode (strips metadata)
   - max 5MB and 4096×4096 pixels (`limitInputPixels`)
@@ -27,7 +28,12 @@ Message documents stay in the private `message-attachments` bucket with `Content
 
 ## Not implemented (do not claim)
 
-- **Malware scanning** of document or message attachments.
+- **Malware scanning** of document or message attachments. `uploadStorageFile()` /
+  `uploadMessageAttachment()` upload directly from the browser to the
+  `message-attachments` bucket and never pass through `/auth/uploads/promote`,
+  so the ClamAV integration below does not cover them yet. Access to that
+  bucket is still restricted to the owner, an AAL2 admin, or an active project
+  participant via Storage RLS — treat contents as untrusted, not as scanned.
 - Automatic migration of unscoped private objects into project-scoped paths. Inventory with `supabase/tests/unscoped-storage-inventory.sql` (counts only). Copy to `{user_id}/{project_id}/...`, confirm access, then delete unscoped copies in a later window. Do not auto-move or auto-delete.
 
 ## Residual risk
