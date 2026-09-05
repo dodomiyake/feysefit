@@ -13,6 +13,43 @@ import {
 } from "@/lib/auth-security";
 import { issueSessionClockCookieValues } from "@/lib/auth-security-server";
 import { sessionBindingFromAccessToken } from "@/lib/security/session-binding";
+import { createServiceClient, isServiceRoleConfigured } from "@/lib/supabase/admin";
+import { clientIpFromHeaders } from "@/lib/security/client-ip";
+import { redactForLogs } from "@/lib/security/redact";
+
+/**
+ * Best-effort: log a breadcrumb when this login joins other still-active
+ * sessions. Never blocks or fails the login flow.
+ */
+async function recordConcurrentSessionIfAny(
+  supabase: ReturnType<typeof createServerClient<Database>>,
+  userId: string,
+  request: NextRequest
+) {
+  if (!isServiceRoleConfigured()) return;
+  try {
+    const { data, error } = await supabase.rpc("list_own_active_sessions");
+    if (error || !data) return;
+    const otherSessions = data.filter((row) => !row.is_current);
+    if (otherSessions.length === 0) return;
+
+    const admin = createServiceClient();
+    await admin.rpc("log_account_activity_server", {
+      p_event_type: "concurrent_session_detected",
+      p_user_id: userId,
+      p_ip: clientIpFromHeaders(request.headers),
+      p_user_agent: request.headers.get("user-agent"),
+      p_meta: { count: otherSessions.length },
+    });
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        type: "concurrent_session_detection_failed",
+        message: redactForLogs(error instanceof Error ? error.message : "unknown"),
+      })
+    );
+  }
+}
 
 /**
  * POST /auth/session/start — seed signed absolute + idle session clocks after login.
@@ -81,6 +118,8 @@ export async function POST(request: NextRequest) {
   // Login, password/email/MFA changes rotate clocks and drop prior reauth grants.
   // A reauth cookie is issued only by POST /auth/reauth after step-up.
   response.cookies.set(REAUTH_COOKIE, "", { ...getReauthCookieOptions(), maxAge: 0 });
+
+  await recordConcurrentSessionIfAny(supabase, user.id, request);
 
   return response;
 }

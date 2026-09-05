@@ -29,17 +29,35 @@ create table if not exists auth.users (
   updated_at timestamptz default now()
 );
 
+create table if not exists auth.sessions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  not_after timestamptz,
+  refreshed_at timestamp,
+  user_agent text,
+  ip inet
+);
+
 create or replace function auth.uid()
 returns uuid
 language sql
 stable
 as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
 
+-- Only exposes session_id (set via request.jwt.claim.session_id in tests);
+-- real GoTrue returns the full claim set, but no function here reads more than that.
 create or replace function auth.jwt()
 returns jsonb
 language sql
 stable
-as $$ select '{}'::jsonb $$;
+as $$
+  select case
+    when nullif(current_setting('request.jwt.claim.session_id', true), '') is null then '{}'::jsonb
+    else jsonb_build_object('session_id', current_setting('request.jwt.claim.session_id', true))
+  end
+$$;
 
 create or replace function auth.role()
 returns text

@@ -968,6 +968,17 @@ export interface Database {
         Args: { p_project_key: string };
         Returns: string;
       };
+      list_own_active_sessions: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          session_id: string;
+          is_current: boolean;
+          device_hint: string | null;
+          ip_hint: string | null;
+          created_at: string;
+          last_active_at: string | null;
+        }[];
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

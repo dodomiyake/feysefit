@@ -8,6 +8,7 @@ export const ACCOUNT_ACTIVITY_TYPES = [
   "sign_out_all_devices",
   "payment_details_changed",
   "payout_details_changed",
+  "concurrent_session_detected",
 ] as const;
 
 export type AccountActivityType = (typeof ACCOUNT_ACTIVITY_TYPES)[number];
@@ -22,6 +23,7 @@ const LABELS: Record<AccountActivityType, string> = {
   sign_out_all_devices: "Sign out all devices requested",
   payment_details_changed: "Payment details changed",
   payout_details_changed: "Payout details changed",
+  concurrent_session_detected: "Signed in while another device was already signed in",
 };
 
 export function accountActivityLabel(eventType: string): string {

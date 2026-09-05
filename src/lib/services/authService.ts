@@ -369,6 +369,30 @@ export async function signOutOtherSessions() {
   if (error) throw new Error(error.message);
 }
 
+export type ActiveSessionRow = {
+  sessionId: string;
+  isCurrent: boolean;
+  deviceHint: string | null;
+  ipHint: string | null;
+  createdAt: string;
+  lastActiveAt: string | null;
+};
+
+/** List this account's active sessions (device/IP hints only, never raw values). */
+export async function listOwnActiveSessions(): Promise<ActiveSessionRow[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("list_own_active_sessions");
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => ({
+    sessionId: row.session_id,
+    isCurrent: row.is_current,
+    deviceHint: row.device_hint,
+    ipHint: row.ip_hint,
+    createdAt: row.created_at,
+    lastActiveAt: row.last_active_at,
+  }));
+}
+
 /** Sign out only this browser (leave other devices signed in). */
 export async function signOutThisDevice() {
   const supabase = createClient();

@@ -16,10 +16,12 @@ import {
   type AccountActivityRow,
 } from "@/lib/services/accountActivityService";
 import {
+  listOwnActiveSessions,
   signOutAllDevices,
   signOutOtherSessions,
   signOutThisDevice,
   updatePassword,
+  type ActiveSessionRow,
 } from "@/lib/services/authService";
 import {
   hasVerifiedTotp,
@@ -100,6 +102,9 @@ export function AccountSecurityContent() {
 
   const [sessionWorking, setSessionWorking] = useState<null | "this" | "others" | "all">(null);
 
+  const [activeSessions, setActiveSessions] = useState<ActiveSessionRow[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(useSupabase);
+
   const [activity, setActivity] = useState<AccountActivityRow[]>([]);
   const [activityLoading, setActivityLoading] = useState(useSupabase);
 
@@ -107,22 +112,26 @@ export function AccountSecurityContent() {
     if (!useSupabase) {
       setMfaChecking(false);
       setActivityLoading(false);
+      setSessionsLoading(false);
       return;
     }
     try {
-      const [changedAt, enrolled, rows] = await Promise.all([
+      const [changedAt, enrolled, rows, sessions] = await Promise.all([
         getPasswordChangedAt(),
         hasVerifiedTotp(),
         listMyAccountActivity(50),
+        listOwnActiveSessions(),
       ]);
       setPasswordChangedAt(changedAt);
       setMfaEnrolled(enrolled);
       setActivity(rows);
+      setActiveSessions(sessions);
     } catch {
       // Tables may not be deployed yet.
     } finally {
       setMfaChecking(false);
       setActivityLoading(false);
+      setSessionsLoading(false);
     }
   }, [useSupabase]);
 
@@ -131,21 +140,24 @@ export function AccountSecurityContent() {
     let cancelled = false;
     void (async () => {
       try {
-        const [changedAt, enrolled, rows] = await Promise.all([
+        const [changedAt, enrolled, rows, sessions] = await Promise.all([
           getPasswordChangedAt(),
           hasVerifiedTotp(),
           listMyAccountActivity(50),
+          listOwnActiveSessions(),
         ]);
         if (cancelled) return;
         setPasswordChangedAt(changedAt);
         setMfaEnrolled(enrolled);
         setActivity(rows);
+        setActiveSessions(sessions);
       } catch {
         // Tables may not be deployed yet.
       } finally {
         if (!cancelled) {
           setMfaChecking(false);
           setActivityLoading(false);
+          setSessionsLoading(false);
         }
       }
     })();
@@ -234,6 +246,7 @@ export function AccountSecurityContent() {
     try {
       await signOutOtherSessions();
       showToast("Signed out of all other devices.");
+      void refreshMeta();
     } catch (error) {
       showToast(
         error instanceof Error ? error.message : "Could not sign out other devices",
@@ -424,6 +437,44 @@ export function AccountSecurityContent() {
         title="Sessions"
         description="End access on this browser or across your other devices. Revoked tokens may remain valid until JWT expiry — keep lifetimes short in production."
       >
+        <div className="mb-5">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+            Active sessions
+          </p>
+          {sessionsLoading ? (
+            <p className="text-sm text-ink-muted">Loading sessions…</p>
+          ) : activeSessions.length === 0 ? (
+            <p className="text-sm text-ink-muted">
+              No other sessions found
+              {useSupabase ? " (requires the concurrent session detection SQL patch)." : "."}
+            </p>
+          ) : (
+            <ul className="divide-y divide-[#d3c3ba]/20 rounded-lg border border-[#d3c3ba]/20 bg-background/50">
+              {activeSessions.map((s) => (
+                <li
+                  key={s.sessionId}
+                  className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-primary">
+                      {s.deviceHint || "Unknown device"}
+                      {s.isCurrent && (
+                        <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 text-xs font-semibold text-accent">
+                          This device
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-xs text-ink-muted">{s.ipHint || "Location hidden"}</p>
+                  </div>
+                  <p className="shrink-0 text-xs text-ink-muted sm:text-right">
+                    Active {formatWhen(s.lastActiveAt)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
         <div className="space-y-3">
           <SessionAction
             title="Sign out this device"
