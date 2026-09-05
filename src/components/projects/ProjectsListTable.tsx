@@ -54,7 +54,7 @@ export function ProjectsListTable() {
     try {
       if (isSupabaseEnabled()) {
         const supabase = createClient();
-        const { error } = await (supabase as any).rpc("delete_closed_project", {
+        const { error } = await supabase.rpc("delete_closed_project", {
           p_project_key: project.id,
         });
         if (error) throw new Error(error.message);

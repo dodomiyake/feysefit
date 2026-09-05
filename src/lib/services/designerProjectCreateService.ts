@@ -41,7 +41,7 @@ export async function createLinkedCustomerProjectForDesigner(
   if (!customerProfileId) throw new Error("Customer not found");
 
   const supabase = createClient();
-  const { data: projectId, error } = await (supabase as any).rpc("create_designer_project", {
+  const { data: projectId, error } = await supabase.rpc("create_designer_project", {
     p_designer_id: designerProfileId,
     p_customer_id: customerProfileId,
     p_title: input.title,

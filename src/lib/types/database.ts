@@ -949,6 +949,25 @@ export interface Database {
         Args: Record<PropertyKey, never>;
         Returns: undefined;
       };
+      create_designer_project: {
+        Args: {
+          p_designer_id: string;
+          p_customer_id: string;
+          p_title: string;
+          p_customer_name: string;
+          p_outfit_type: string;
+          p_deadline: string;
+          p_budget: string;
+          p_description?: string;
+          p_reference_images?: Json;
+          p_items?: Json;
+        };
+        Returns: string;
+      };
+      delete_closed_project: {
+        Args: { p_project_key: string };
+        Returns: string;
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

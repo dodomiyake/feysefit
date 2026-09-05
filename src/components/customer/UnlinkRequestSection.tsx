@@ -44,7 +44,7 @@ export function UnlinkRequestSection() {
           project.designerId === customerLink.linkedDesignerId
       )
     );
-  }, [authUser?.customerId, customerLink.linkedDesignerId, projects]);
+  }, [authUser, customerLink.linkedDesignerId, projects]);
 
   const hasOpenUnlinkRequestForLinkedDesigner = useMemo(() => {
     if (!customerLink.linkedDesignerId) return false;
@@ -54,7 +54,7 @@ export function UnlinkRequestSection() {
         (!authUser?.customerId || request.customerId === authUser.customerId) &&
         request.designerId === customerLink.linkedDesignerId
     );
-  }, [authUser?.customerId, customerLink.linkedDesignerId, unlinkRequests]);
+  }, [authUser, customerLink.linkedDesignerId, unlinkRequests]);
 
   const hasBlockingProjects = blockingProjects.length > 0;
   const canStartUnlink = Boolean(customerLink.linkedDesignerId) && !hasBlockingProjects;
