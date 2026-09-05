@@ -58,6 +58,16 @@ export function getClamavScanToken(): string | null {
   return readSecret("CLAMAV_SCAN_TOKEN");
 }
 
+/** Server-only Better Stack (Logtail) source token. Never NEXT_PUBLIC_*. */
+export function getBetterStackSourceToken(): string | null {
+  return readSecret("BETTERSTACK_SOURCE_TOKEN");
+}
+
+/** Optional override for Better Stack's ingesting host. Defaults to the shared endpoint. */
+export function getBetterStackIngestingUrl(): string {
+  return readSecret("BETTERSTACK_INGESTING_URL") ?? "https://in.logs.betterstack.com";
+}
+
 export function missingServerSecret(name: string): Error {
   return new Error(`${name} is not configured`);
 }

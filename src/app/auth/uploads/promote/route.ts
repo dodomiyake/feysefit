@@ -3,6 +3,7 @@ import { createServiceClient, isServiceRoleConfigured } from "@/lib/supabase/adm
 import { NextResponse, type NextRequest } from "next/server";
 import { processPublicImage, UploadValidationError } from "@/lib/security/image-process";
 import { scanForMalware } from "@/lib/security/malware-scan";
+import { shipLog } from "@/lib/security/log-shipper";
 import { runSensitiveHttpAction } from "@/lib/security/rate-limit";
 import { STORAGE_BUCKETS, MAX_STORAGE_IMAGE_BYTES, type StorageBucket } from "@/lib/storage/buckets";
 import { buildOwnedObjectPath } from "@/lib/storage/storage-url";
@@ -92,15 +93,16 @@ export async function POST(request: NextRequest) {
 
     const scan = await scanForMalware(bytes);
     if (scan.status === "infected") {
-      console.error(
-        JSON.stringify({ type: "upload_malware_detected", requestId, signature: scan.signature })
-      );
+      await shipLog({
+        type: "upload_malware_detected",
+        level: "warning",
+        requestId,
+        signature: scan.signature,
+      });
       return { ok: false as const, status: 400 as const, error: "malware_detected" };
     }
     if (scan.status === "unavailable") {
-      console.error(
-        JSON.stringify({ type: "upload_scan_unavailable", requestId, reason: scan.reason })
-      );
+      await shipLog({ type: "upload_scan_unavailable", requestId, reason: scan.reason });
       return { ok: false as const, status: 503 as const, error: "scan_unavailable" };
     }
 
@@ -122,13 +124,11 @@ export async function POST(request: NextRequest) {
       cacheControl: "3600",
     });
     if (error) {
-      console.error(
-        JSON.stringify({
-          type: "upload_promote_failed",
-          requestId,
-          message: redactForLogs(error.message),
-        })
-      );
+      await shipLog({
+        type: "upload_promote_failed",
+        requestId,
+        message: redactForLogs(error.message),
+      });
       throw new Error("upload_failed");
     }
     const { data } = admin.storage.from(bucket).getPublicUrl(path);

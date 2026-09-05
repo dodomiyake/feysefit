@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { STORAGE_BUCKETS } from "@/lib/storage/buckets";
 import { timingSafeEqual } from "@/lib/security/hmac";
 import { redactForLogs } from "@/lib/security/redact";
+import { shipLog } from "@/lib/security/log-shipper";
 
 const MAX_REMOVE = 500;
 const MAX_FOLDERS = 100;
@@ -74,13 +75,11 @@ export async function POST(request: NextRequest) {
     if (error) throw error;
     return NextResponse.json({ ok: true, removed: expired.length, requestId });
   } catch (error) {
-    console.error(
-      JSON.stringify({
-        type: "quarantine_cleanup_failed",
-        requestId,
-        message: redactForLogs(error instanceof Error ? error.message : "unknown"),
-      })
-    );
+    await shipLog({
+      type: "quarantine_cleanup_failed",
+      requestId,
+      message: redactForLogs(error instanceof Error ? error.message : "unknown"),
+    });
     return NextResponse.json({ ok: false, error: "unavailable", requestId }, { status: 503 });
   }
 }

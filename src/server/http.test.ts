@@ -10,7 +10,7 @@ import { SensitiveRateLimitError } from "@/lib/security/rate-limit-core";
 
 describe("handleApiError", () => {
   it("does not send internal database text to the client", async () => {
-    const response = handleApiError(
+    const response = await handleApiError(
       new Error("relation public.internal_objects does not exist")
     );
     const body = (await response.json()) as {
@@ -28,7 +28,7 @@ describe("handleApiError", () => {
   });
 
   it("maps SensitiveRateLimitError to HTTP 503 without provider text", async () => {
-    const response = handleApiError(
+    const response = await handleApiError(
       new SensitiveRateLimitError({
         ok: false,
         kind: "unavailable",

@@ -16,6 +16,7 @@ import { sessionBindingFromAccessToken } from "@/lib/security/session-binding";
 import { createServiceClient, isServiceRoleConfigured } from "@/lib/supabase/admin";
 import { clientIpFromHeaders } from "@/lib/security/client-ip";
 import { redactForLogs } from "@/lib/security/redact";
+import { shipLog } from "@/lib/security/log-shipper";
 
 /**
  * Best-effort: log a breadcrumb when this login joins other still-active
@@ -42,12 +43,10 @@ async function recordConcurrentSessionIfAny(
       p_meta: { count: otherSessions.length },
     });
   } catch (error) {
-    console.error(
-      JSON.stringify({
-        type: "concurrent_session_detection_failed",
-        message: redactForLogs(error instanceof Error ? error.message : "unknown"),
-      })
-    );
+    await shipLog({
+      type: "concurrent_session_detection_failed",
+      message: redactForLogs(error instanceof Error ? error.message : "unknown"),
+    });
   }
 }
 

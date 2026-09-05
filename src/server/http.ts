@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { redactForLogs } from "@/lib/security/redact";
+import { shipLog } from "@/lib/security/log-shipper";
 import {
   RATE_LIMITED_CODE,
   RATE_LIMITED_MESSAGE,
@@ -45,20 +46,18 @@ export function jsonError(message: string, status = 400, code?: string) {
   );
 }
 
-export function handleApiError(error: unknown) {
+export async function handleApiError(error: unknown) {
   if (error instanceof SensitiveRateLimitError) {
     return rateLimitHttpResponse(error.decision);
   }
 
   const requestId = crypto.randomUUID();
   const raw = error instanceof Error ? error.message : String(error);
-  console.error(
-    JSON.stringify({
-      type: "api_error",
-      requestId,
-      message: redactForLogs(raw),
-    })
-  );
+  await shipLog({
+    type: "api_error",
+    requestId,
+    message: redactForLogs(raw),
+  });
 
   return NextResponse.json(
     {

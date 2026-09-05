@@ -6,6 +6,7 @@ import { sanitizeEventMeta } from "@/lib/security/event-meta";
 import { NextResponse, type NextRequest } from "next/server";
 import { clientIpFromHeaders, runSensitiveHttpAction } from "@/lib/security/rate-limit";
 import { redactForLogs } from "@/lib/security/redact";
+import { shipLog } from "@/lib/security/log-shipper";
 
 const ALLOWED_EVENTS = new Set([
   "login_failed",
@@ -79,13 +80,11 @@ export async function POST(request: NextRequest) {
       p_meta: meta,
     });
     if (error) {
-      console.error(
-        JSON.stringify({
-          type: "security_event_rpc_failed",
-          requestId,
-          message: redactForLogs(error.message),
-        })
-      );
+      await shipLog({
+        type: "security_event_rpc_failed",
+        requestId,
+        message: redactForLogs(error.message),
+      });
       throw new Error("log_failed");
     }
     return true as const;
