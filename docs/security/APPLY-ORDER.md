@@ -53,6 +53,7 @@ Then, in a **staging** SQL editor, entire files from line 1:
 7. `supabase/patch-marketplace-enquiries.sql` (pending enquiry records, pair-scoped linking, and atomic project creation).
 8. `supabase/patch-marketplace-enquiry-conversations.sql` (designer acceptance-for-discussion, participant-only pre-link replies, client agreement confirmation, and explicit designer finalisation). Deploy the matching application in the same release; accepting for discussion or replying cannot create a relationship, and the legacy immediate-link RPC remains revoked.
 9. `supabase/patch-marketplace-enquiry-live-unlink.sql` (live enquiry/message notifications and automatic accepted → unlinked archival when the relationship ends).
+10. `supabase/patch-function-search-path-hardening.sql` (pins `search_path` on `project_status_blocks_unlink`, `is_messaging_shell_project`, `project_is_active_for_customer`, `redact_ip_hint`, `coarse_device_hint`, `touch_testimonial_updated_at`, `touch_delivery_issue_updated_at` — closes the `function_search_path_mutable` Security Advisor findings. Re-creates each function with the identical signature/body, so it is a no-op for callers; safe to re-run. Already applied on staging — this brings production in line with it.)
 
 Limiter for the application is now:
 
