@@ -36,7 +36,7 @@ as $$
   order by coalesce(s.refreshed_at, s.updated_at) desc;
 $$;
 
-revoke all on function public.list_own_active_sessions() from public;
+revoke all on function public.list_own_active_sessions() from public, anon, authenticated;
 grant execute on function public.list_own_active_sessions() to authenticated;
 
 create or replace function public.log_account_activity_server(

@@ -128,6 +128,39 @@ Earlier first-pass rollbacks (only if those patches must be undone):
 5. `supabase/rollback-testimonial-view-lockdown.sql`
 6. `supabase/rollback-designer-private-details.sql`
 
+## Default privileges on `public` functions — write every new function's revoke line as `from public, anon, authenticated`
+
+The production project has an `ALTER DEFAULT PRIVILEGES` on schema `public`
+that grants `EXECUTE` on newly created functions to `anon`, `authenticated`,
+and `service_role` automatically (`select * from pg_default_acl` joined to
+`pg_namespace` on `nspname = 'public'` shows it — grantor `postgres`, four
+role OIDs including `anon`). The staging project does not have this default;
+a fresh disposable Postgres (`supabase/tests/ci-bootstrap.sql`) does not
+either. That mismatch is real and already known — see "Required comparison"
+in `STAGING-BASELINE.md` — but this specific default hadn't been reconciled
+before `patch-concurrent-session-detection.sql`'s first version shipped with
+only `revoke all on function ... from public;` (no explicit `anon`/
+`authenticated`), which left `list_own_active_sessions()` executable by
+`anon` on production for a few minutes (2026-09-05) until caught by a manual
+`has_function_privilege('anon', ...)` check and corrected in place. No data
+was exposed — the function scopes every row to `auth.uid()`, which is
+`NULL` for an anonymous caller, so it would have returned zero rows
+regardless — but the grant itself was still wrong. Confirmed via
+`select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and has_function_privilege('anon', p.oid, 'EXECUTE')`
+that this was the only function affected; every other existing function
+already carried an explicit `anon` revoke from prior hardening rounds.
+
+Every other `create or replace function public.*` patch in this repo
+already writes `revoke all on function ... from public, anon, authenticated`
+(three roles, not just `public`) for exactly this reason — treat that as
+the required pattern for any new function, not just a stylistic habit.
+Root-causing this means running
+`alter default privileges for role postgres in schema public revoke execute on functions from anon;`
+(and deciding whether `authenticated` should default-grant or not) — that
+changes what *every future* function gets by default, project-wide, so
+don't do it as a side effect of a smaller change; treat it as its own
+reviewed, deliberate migration.
+
 ## Expected Security Advisor findings
 
 - RLS helper functions (`is_admin`, `is_admin_aal2`, …) as SECURITY DEFINER. They read `auth.uid()` and `public.users.role`, not client-editable user metadata.
